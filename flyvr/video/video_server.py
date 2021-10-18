@@ -8,6 +8,7 @@ import pkg_resources
 
 import h5py
 import numpy as np
+from scipy.io import loadmat
 
 from flyvr.common import Randomizer, BACKEND_VIDEO
 from flyvr.common.dottable import Dottable
@@ -19,8 +20,8 @@ from PIL import Image
 from psychopy import visual, core, event
 from psychopy.visual.windowwarp import Warper
 from psychopy.visual.windowframepack import ProjectorFramePacker
-import glob 
-import os 
+import glob
+import os
 
 
 H5_SYNC_VERSION = 1
@@ -678,6 +679,51 @@ class PipStim(VideoStim):
         self.screen.draw()
 
 
+class BackNForth(VideoStim):
+    NAME = 'backnforth'
+
+    H5_FIELDS = ('video_output_num_frames',
+                 'bg_color',
+                 '?',
+                 'pos_x',
+                 'pos_y',
+                 'size_x',
+                 'size_y')
+
+    def __init__(self, filename='sawtooth.mat', offset=(0.2, -0.5), bg_color=-1, fg_color=1, **kwargs):
+        super().__init__(offset=[float(offset[0]), float(offset[1])],
+                         bg_color=float(bg_color), fg_color=float(fg_color), **kwargs)
+
+        filePath = package_data_filename(filename)
+        f = loadmat(filePath)
+        self._tang = 75*f['x'].flatten()/90
+        self._tdis = np.zeros(len(self._tang)) + 50
+        self.screen = None
+
+    def initialize(self, win, fps, flyvr_shared_state):
+        super().initialize(win, fps, flyvr_shared_state)
+        self.screen = visual.Rect(win=win,
+                                  size=(0.25, 0.25), pos=self.p.offset,
+                                  lineColor=None, fillColor=self.p.fg_color)
+
+    def update(self, win, logger, frame_num):
+        win.color = self.p.bg_color
+
+        xoffset, yoffset = self.p.offset
+
+        self.screen.pos = self._tang[round(frame_num)] + xoffset, yoffset
+        self.screen.size = 1 / self._tdis[round(frame_num)], 1 / self._tdis[round(frame_num)]
+
+        self.h5_log(logger, frame_num,
+                            self.p.bg_color,
+                            0,
+                            self.screen.pos[0], self.screen.pos[1],
+                            self.screen.size[0], self.screen.size[1])
+
+    def draw(self):
+        self.screen.draw()
+
+
 class LoomingStim(VideoStim):
 
     NAME = 'looming'
@@ -920,7 +966,7 @@ class OptModel(VideoStim):
 
 
 STIMS = (NoStim, GratingStim, MovingSquareStim, LoomingStim, MayaModel, OptModel, PipStim, SweepingSpotStim,
-         AdamStim, AdamStimGrating, LoomingStimCircle, GenericStaticFixationStim)
+         AdamStim, AdamStimGrating, LoomingStimCircle, GenericStaticFixationStim, BackNForth)
 
 
 def stimulus_factory(name, **params):
@@ -1051,7 +1097,7 @@ class VideoServer(object):
             warpfile = self.calibration_file
         else:
             warpfile = 'calibratedBallImage.data'
- 
+
         if os.path.isfile(warpfile):
             # warp the image according to some calibration that we have already performed
             self.warper = Warper(self.mywin,
