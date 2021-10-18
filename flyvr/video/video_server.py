@@ -19,6 +19,8 @@ from PIL import Image
 from psychopy import visual, core, event
 from psychopy.visual.windowwarp import Warper
 from psychopy.visual.windowframepack import ProjectorFramePacker
+import glob 
+import os 
 
 
 H5_SYNC_VERSION = 1
@@ -329,6 +331,7 @@ class GratingStim(VideoStim):
         self.screen = visual.GratingStim(win=win, size=self.p.stim_size,
                                          pos=[0, 0], sf=self.p.sf,
                                          color=self.p.stim_color, phase=0)
+        # import pdb; pdb.set_trace()
 
     def update(self, win, logger, frame_num):
         self.screen.setPhase(0.05, '+')
@@ -342,7 +345,6 @@ class GratingStim(VideoStim):
 
     def draw(self):
         self.screen.draw()
-
 
 class SweepingSpotStim(VideoStim):
     NAME = 'sweeping_spot'
@@ -937,20 +939,20 @@ class VideoServer(object):
 
         self.stim = self.mywin = self.synchRect = self.framepacker = self.warper = None
 
-        self.use_lightcrafter = False
-        if use_lightcrafter:
-            dlplc = LightCrafterTCP()
-            self._log.debug("attempting to setup lightcrafter: %r" % dlplc)
-            if dlplc.connect():
-                # noinspection PyBroadException
-                try:
-                    dlplc.cmd_current_display_mode(0x02)
-                    dlplc.cmd_current_video_mode(frame_rate=60, bit_depth=7, led_color=4)
-                    self.use_lightcrafter = True
-                except Exception:
-                    self._log.error("error configuring DLP", exc_info=True)
-            else:
-                self._log.warning("could not configure: %r" % dlplc)
+        self.use_lightcrafter = True
+        # if use_lightcrafter:
+            # dlplc = LightCrafterTCP()
+            # self._log.debug("attempting to setup lightcrafter: %r" % dlplc)
+            # if dlplc.connect():
+            #     # noinspection PyBroadException
+            #     try:
+            #         dlplc.cmd_current_display_mode(0x02)
+            #         dlplc.cmd_current_video_mode(frame_rate=60, bit_depth=7, led_color=4)
+            #         self.use_lightcrafter = True
+            #     except Exception:
+            #         self._log.error("error configuring DLP", exc_info=True)
+            # else:
+            #     self._log.warning("could not configure: %r" % dlplc)
 
         self._log.info("%sshowing visual stimulus on lightcrafter" % ('' if self.use_lightcrafter else 'not '))
 
@@ -977,11 +979,13 @@ class VideoServer(object):
         for stimcls in STIMS:
             stimcls.create_h5_log(self.logger)
 
-        self.mywin = visual.Window([608, 684],
+        # 912,1140
+        self.mywin = visual.Window([912,1140],
                                    monitor='DLP',
                                    screen=1 if self.use_lightcrafter else 0,
                                    useFBO=True, color=0)
-        self._fps = self.mywin.getActualFrameRate()
+        # self._fps = self.mywin.getActualFrameRate()
+        self._fps = 60
         if self._fps is None:
             raise ValueError('could not determine monitor FPS')
 
@@ -1036,9 +1040,9 @@ class VideoServer(object):
         """
         self._running = True
 
-        if self.use_lightcrafter:
-            self.framepacker = ProjectorFramePacker(self.mywin)
-            self._log.debug('attached framepacker for lightcrafter')
+        # if self.use_lightcrafter:
+        #     self.framepacker = ProjectorFramePacker(self.mywin)
+        #     self._log.debug('attached framepacker for lightcrafter')
 
         self.synchRect = visual.Rect(win=self.mywin, size=(0.25, 0.25), pos=[0.75, -0.75],
                                      lineColor=None, fillColor='grey')
@@ -1047,7 +1051,7 @@ class VideoServer(object):
             warpfile = self.calibration_file
         else:
             warpfile = 'calibratedBallImage.data'
-
+ 
         if os.path.isfile(warpfile):
             # warp the image according to some calibration that we have already performed
             self.warper = Warper(self.mywin,
