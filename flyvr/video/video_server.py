@@ -9,6 +9,7 @@ import pkg_resources
 import h5py
 import numpy as np
 from scipy.io import loadmat
+from scipy.signal import resample
 
 from flyvr.common import Randomizer, BACKEND_VIDEO
 from flyvr.common.dottable import Dottable
@@ -690,14 +691,20 @@ class BackNForth(VideoStim):
                  'size_x',
                  'size_y')
 
-    def __init__(self, filename='sawtooth.mat', offset=(0.2, -0.5), bg_color=-1, fg_color=1, **kwargs):
+    def __init__(self, filename='sawtooth.mat', offset=(0.2, -0.5), bg_color=-1, fg_color=1,resamp=None, **kwargs):
         super().__init__(offset=[float(offset[0]), float(offset[1])],
                          bg_color=float(bg_color), fg_color=float(fg_color), **kwargs)
 
         filePath = package_data_filename(filename)
         f = loadmat(filePath)
-        self._tang = 75*f['x'].flatten()/90
-        self._tdis = np.zeros(len(self._tang)) + 50
+        f = f['x'].flatten()
+
+        # Resample signal if specified
+        if resamp is not None:
+            f = resample(f,len(f)//int(resamp))
+
+        self._tang = 25*f/90
+        self._tdis = np.zeros(len(self._tang)) + 15
         self.screen = None
 
     def initialize(self, win, fps, flyvr_shared_state):
@@ -712,7 +719,7 @@ class BackNForth(VideoStim):
         xoffset, yoffset = self.p.offset
 
         self.screen.pos = self._tang[round(frame_num)] + xoffset, yoffset
-        self.screen.size = 1 / self._tdis[round(frame_num)], 1 / self._tdis[round(frame_num)]
+        self.screen.size = 1 / (2*self._tdis[round(frame_num)]), 1 / self._tdis[round(frame_num)]
 
         self.h5_log(logger, frame_num,
                             self.p.bg_color,
