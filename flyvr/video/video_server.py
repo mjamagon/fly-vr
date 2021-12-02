@@ -691,7 +691,7 @@ class BackNForth(VideoStim):
                  'size_x',
                  'size_y')
 
-    def __init__(self, filename='sawtooth.mat', offset=(0.2, -0.5), bg_color=-1, fg_color=1,resamp=None, **kwargs):
+    def __init__(self, filename='sawtooth.mat', offset=(0.2, -0.5), bg_color=-1, fg_color=1,resamp=None,distance=10, **kwargs):
         super().__init__(offset=[float(offset[0]), float(offset[1])],
                          bg_color=float(bg_color), fg_color=float(fg_color), **kwargs)
 
@@ -701,10 +701,10 @@ class BackNForth(VideoStim):
 
         # Resample signal if specified
         if resamp is not None:
-            f = resample(f,len(f)//int(resamp))
+            f = resample(f,int(len(f)/resamp))
 
         self._tang = 25*f/90
-        self._tdis = np.zeros(len(self._tang)) + 15
+        self._tdis = np.zeros(len(self._tang)) + distance
         self.screen = None
 
     def initialize(self, win, fps, flyvr_shared_state):
@@ -720,6 +720,50 @@ class BackNForth(VideoStim):
 
         self.screen.pos = self._tang[round(frame_num)] + xoffset, yoffset
         self.screen.size = 1 / (2*self._tdis[round(frame_num)]), 1 / self._tdis[round(frame_num)]
+
+        self.h5_log(logger, frame_num,
+                            self.p.bg_color,
+                            0,
+                            self.screen.pos[0], self.screen.pos[1],
+                            self.screen.size[0], self.screen.size[1])
+
+    def draw(self):
+        self.screen.draw()
+
+class CustomStim(VideoStim):
+    NAME = 'customstim'
+
+    H5_FIELDS = ('video_output_num_frames',
+                 'bg_color',
+                 '?',
+                 'pos_x',
+                 'pos_y',
+                 'size_x',
+                 'size_y')
+
+    def __init__(self, filename, offset=(0.2, -0.5), bg_color=-1, fg_color=1, **kwargs):
+        super().__init__(offset=[float(offset[0]), float(offset[1])],
+                         bg_color=float(bg_color), fg_color=float(fg_color), **kwargs)
+
+        with h5py.File(filename, 'r') as f:
+            self._tdis = f['tDis'][:, 0]
+            self._tang = f['tAng'][:, 0]
+
+        self.screen = None
+
+    def initialize(self, win, fps, flyvr_shared_state):
+        super().initialize(win, fps, flyvr_shared_state)
+        self.screen = visual.Rect(win=win,
+                                  size=(0.25, 0.25), pos=self.p.offset,
+                                  lineColor=None, fillColor=self.p.fg_color)
+
+    def update(self, win, logger, frame_num):
+        win.color = self.p.bg_color
+
+        xoffset, yoffset = self.p.offset
+
+        self.screen.pos = self._tang[round(frame_num)] / 180 + xoffset, yoffset
+        self.screen.size = 1 / self._tdis[round(frame_num)], 1 / self._tdis[round(frame_num)]
 
         self.h5_log(logger, frame_num,
                             self.p.bg_color,
@@ -973,7 +1017,7 @@ class OptModel(VideoStim):
 
 
 STIMS = (NoStim, GratingStim, MovingSquareStim, LoomingStim, MayaModel, OptModel, PipStim, SweepingSpotStim,
-         AdamStim, AdamStimGrating, LoomingStimCircle, GenericStaticFixationStim, BackNForth)
+         AdamStim, AdamStimGrating, LoomingStimCircle, GenericStaticFixationStim, BackNForth, CustomStim)
 
 
 def stimulus_factory(name, **params):

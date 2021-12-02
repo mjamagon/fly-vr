@@ -9,6 +9,7 @@ from flyvr.common import SharedState, BACKEND_HWIO
 from flyvr.common.ipc import Reciever, RELAY_RECIEVE_PORT, RELAY_HOST, CommonMessages
 
 DEFAULT_REMOTE = '127.0.0.1', 5661
+# DEFAULT_REMOTE = '128.112.222.163', 5661
 
 
 class PhidgetIO(object):
@@ -66,6 +67,7 @@ class PhidgetIO(object):
                 try:
                     tp.openWaitForAttachment(1000)
                 except Exception:
+                    print(tp)
                     self._tp_start = self._tp_stop = self._tp_next = self._tp_led = None
                     self._log.error('2p scanimage was enabled but not all phidget devices detected', exc_info=True)
                     break
@@ -105,6 +107,7 @@ class PhidgetIO(object):
         if self._stack == 0:
             # first time through, just start recording
             # only pulse start high
+            time.sleep(5)
             self._pulse(self._tp_start, high_time=0.1)
             self._log.debug('pulse start: high_time=0.1')
         elif self._signal_next_enable:
