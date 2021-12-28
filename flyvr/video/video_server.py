@@ -312,21 +312,30 @@ class NoStim(VideoStim):
 class GratingStim(VideoStim):
     NAME = 'grating'
 
-    NUM_VIDEO_FIELDS = 7
+    NUM_VIDEO_FIELDS = 8
     H5_FIELDS = ('video_output_num_frames',
                  'bg_color',
                  '?',
                  'sf',
                  'stim_size',
                  'stim_color',
-                 'phase')
+                 'phase',
+                 'direction') #'+' or '-'
 
-    def __init__(self, sf=50, stim_size=5, stim_color=-1, bg_color=0.5, **kwargs):
+    def __init__(self, sf=50, stim_size=5, stim_color=-1, bg_color=0.5, direction='+',**kwargs):
         super().__init__(sf=int(sf),
                          stim_size=int(stim_size),
                          stim_color=int(stim_color),
-                         bg_color=float(bg_color), **kwargs)
+                         bg_color=float(bg_color),
+                         direction=str(direction),**kwargs)
         self.screen = None
+
+    def convertStrToInt(self,str):
+        '''Convert string-type direction to int.'''
+        if str=='+':
+            return 1
+        else:
+            return -1
 
     def initialize(self, win, fps, flyvr_shared_state):
         super().initialize(win, fps, flyvr_shared_state)
@@ -336,14 +345,15 @@ class GratingStim(VideoStim):
         # import pdb; pdb.set_trace()
 
     def update(self, win, logger, frame_num):
-        self.screen.setPhase(0.05, '+')
+        self.screen.setPhase(0.05,self.p.direction)
         self.h5_log(logger, frame_num,
                             self.p.bg_color,
                             1,
                             self.p.sf,
                             self.p.stim_size,
                             self.p.stim_color,
-                            self.screen.phase[0])
+                            self.screen.phase[0],
+                            self.convertStrToInt(self.p.direction))
 
     def draw(self):
         self.screen.draw()
