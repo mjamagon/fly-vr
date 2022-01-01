@@ -1,0 +1,4 @@
+### flyvr ### 
+configGui-pgr -c fictrac_config_20211202.txt # configure fictrac masks 
+fictrac-pgr -c fictrac_config.txt # test fictrac 
+flyvr -c config.yaml -e experiment.py --fictrac_version 2 # run experiment 

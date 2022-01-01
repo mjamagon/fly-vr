@@ -1,9 +1,9 @@
 import numpy as np
 from matplotlib import pyplot as plt 
 import h5py 
-import sys 
 import glob
 import os 
+import sys 
 from scipy.ndimage import label
 
 def normalize(x):
@@ -18,22 +18,19 @@ baseDir = os.path.dirname(path)
 daqPath = glob.glob(os.path.join(baseDir,'*daq.h5'))[0]
 daq = h5py.File(daqPath,'r')
 stim = daq['daq']['input']['samples'][:,0]
-stim = normalize(stim)
 
 # Get fictrac data 
 data = h5py.File(path,'r')
 fictrac = data['fictrac']
 rs = fictrac['output'][:,2]
-fictac = normalize(rs)
 
 # Timestamps for stim and fictrac 
-sync = daq['daq']['chunk_synchronization_info']
+sync = daq['daq']['input']['synchronization_info']
 fictracSync = sync[:,0]
 stimSync = sync[:,1]
 
 # Find stim times 
-import pdb; pdb.set_trace()
-stimBinary = np.where(stim>0.075,1,0)
+stimBinary = np.where(stim>=0.1,1,0)
 labels = label(stimBinary)[0]
 events = np.sort(np.unique(labels))[1:]
 times = np.arange(len(stimBinary))
@@ -43,6 +40,7 @@ stimOffsets = [times[labels==e][-1] for e in events]
 # Get stim times closest to sync times 
 syncOnsets = [] 
 syncOffsets = []
+
 for onset,offset in zip(stimOnsets,stimOffsets):
 	closestOnsetTime = min(stimSync,key=lambda x:abs(x-onset))
 	closestOffsetTime = min(stimSync,key=lambda x:abs(x-offset))

@@ -1,0 +1,107 @@
+configuration:
+  analog_in_channels:
+    2: 'Copy of y galvo'
+    3: 'Copy of optogenetics'
+  analog_out_channels:
+    1: 'LED control for optogenetics'
+  attenuation_file: None
+  delay: 0
+  fictrac_config: max_config_20210708.txt
+  fictrac_console_out: log.txt
+  keepalive_audio: false
+  keepalive_video: false
+  pgr_cam_disable: false
+  phidget_network: false
+  print_defaults: false
+  projector_disable: false
+  remote_2P_disable: false
+  remote_2P_next_disable: true
+  remote_next_2P_channel:
+  remote_start_2P_channel: 0
+  remote_stop_2P_channel: 1
+  samplerate_daq: 10000
+  scanimage_next_start_delay: 1000
+  screen_calibration: calibratedBallImage.data
+  use_RSE: true
+  verbose: false
+  wait: true
+playlist:
+  daq:
+    - _options: {random_mode: none, repeat: 0}
+    - NoLight:
+        attenuator: null
+        amplitude: 0.0
+        duration: 10000
+        name: constant
+        sample_rate: 10000
+    - opto_.1:
+        amplitude_a: 0.1
+        duration_a: 500
+        amplitude_b: 0.0
+        duration_b: 1000000
+        name: pulse
+        sample_rate: 10000
+    - opto_.2:
+        amplitude_a: 0.2
+        duration_a: 500
+        amplitude_b: 0.0
+        duration_b: 1000000
+        name: pulse
+        sample_rate: 10000
+    - opto_.25:
+        amplitude_a: 0.25
+        duration_a: 500
+        amplitude_b: 0.0
+        duration_b: 1000000
+        name: pulse
+        sample_rate: 10000
+    - opto_.5:
+        amplitude_a: 0.5
+        duration_a: 500
+        amplitude_b: 0.0
+        duration_b: 1000000
+        name: pulse
+        sample_rate: 10000
+    - opto_.75:
+        amplitude_a: 0.75
+        duration_a: 500
+        amplitude_b: 0.0
+        duration_b: 1000000
+        name: pulse
+        sample_rate: 10000
+    - opto_1:
+        amplitude_a: 1
+        duration_a: 500
+        amplitude_b: 0.0
+        duration_b: 1000000
+        name: pulse
+        sample_rate: 10000
+    - opto_2:
+        amplitude_a: 2
+        duration_a: 500
+        amplitude_b: 0.0
+        duration_b: 1000000
+        name: pulse
+        sample_rate: 10000
+    - opto_5:
+        amplitude_a: 5
+        duration_a: 500
+        amplitude_b: 0.0
+        duration_b: 1000000
+        name: pulse
+        sample_rate: 10000
+    - opto_10:
+        amplitude_a: 10
+        duration_a: 500
+        amplitude_b: 0.0
+        duration_b: 1000000
+        name: pulse
+        sample_rate: 10000
+  video:
+    - pipstim:
+        name: 'pipstim'
+        fps: 10
+        offset: [0, -0.3]
+        size: [1,1]
+        fg_color: -1
+        bg_color: 1
