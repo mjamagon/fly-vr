@@ -16,6 +16,8 @@ from flyvr.common.dottable import Dottable
 from flyvr.common.build_arg_parser import setup_logging
 from flyvr.projector.dlplc_tcp import LightCrafterTCP
 from flyvr.common.ipc import PlaylistReciever
+from flyvr.fictrac.shmem_transfer_data import new_mmap_shmem_buffer, new_mmap_signals_buffer, \
+    SHMEMFicTracState, fictrac_state_to_vec, NUM_FICTRAC_FIELDS
 
 from PIL import Image
 from psychopy import visual, core, event
@@ -705,10 +707,11 @@ class BackNForth(VideoStim):
                  'size_x',
                  'size_y')
 
-    def __init__(self, filename='sawtooth.mat', offset=(-0.15,-0.5), bg_color=-1, fg_color=1,resamp=None,distance=10, **kwargs):
+    def __init__(self, filename='sawtooth.mat', offset=(-0.15,-0.5), bg_color=-1, fg_color=1,resamp=None,distance=10, CL=False,pipDist=False,**kwargs):
         super().__init__(offset=[float(offset[0]), float(offset[1])],
-                         bg_color=float(bg_color), fg_color=float(fg_color), **kwargs)
+                         bg_color=float(bg_color), fg_color=float(fg_color),CL=CL,**kwargs)
 
+        # Load stimulus position and size
         filePath = package_data_filename(filename)
         f = loadmat(filePath)
         f = f['x'].flatten()
@@ -722,8 +725,16 @@ class BackNForth(VideoStim):
             if not os.path.exists(dataPath):
                 np.save(dataPath,f)
 
-        self._tang = 25*f/180
-        self._tdis = np.zeros(len(self._tang)) + distance
+        self._tang = f/8 #-45 (left) to 45 degrees (straight ahead)
+
+        # Stimulus size
+        if not pipDist:
+            self._tdis = np.zeros(len(self._tang)) + distance
+        else:
+            # Load pipstim too.
+            with h5py.File(package_data_filename('pipStim.mat'), 'r') as f:
+                self._tdis = f['tDis'][:, 0]
+
         self.screen = None
 
     def initialize(self, win, fps, flyvr_shared_state):
@@ -731,15 +742,57 @@ class BackNForth(VideoStim):
         self.screen = visual.Rect(win=win,
                                   size=(0.25, 0.25), pos=self.p.offset,
                                   lineColor=None, fillColor=self.p.fg_color)
+        self.sharedState = flyvr_shared_state
+        self.ballAngle = 0 # angular ball position
+        self.rotVel = collections.deque(maxlen=6)
+        self.adjust = 0 # protects against index out of bounds error
 
     def update(self, win, logger, frame_num):
         win.color = self.p.bg_color
-
         xoffset, yoffset = self.p.offset
 
-        self.screen.pos = self._tang[round(frame_num)] + xoffset, yoffset
-        self.screen.size = 1 / (2*self._tdis[round(frame_num)]), 1 / self._tdis[round(frame_num)]
+        # If closed loop, get instantaneous rotational speed
+        rotVel = 0
 
+        if self.p.CL:
+            # Get rotational velocity
+            fictracState = self.sharedState._fictrac_shmem_state
+            self.rotVel.append(fictrac_state_to_vec(fictracState)[2])
+            rotVel = np.sum(self.rotVel)
+
+            #Convert radian to normalized range
+            rotVel/=np.pi
+            # print(rotVel)
+
+            # Update ball position
+            ballAngle = self.ballAngle
+
+        # If frame_num greater than length of stim, adjust frame num
+        if (round(frame_num)+1)%len(self._tang)==0:
+            multiple = (round(frame_num)+1)//len(self._tang)
+            self.adjust = multiple*len(self._tang)
+
+        # x position of stimulus
+        xPos = xoffset + rotVel + self._tang[round(frame_num)-self.adjust]
+
+        # Constrain x position of target
+        xMin,xMax = -1/8 + xoffset, 1/8 + xoffset
+        if xMin <= xPos <= xMax:
+            self.ballAngle+=rotVel
+        else:
+            if xPos < xMin:
+                xPos = xMin
+            elif xPos > xMax:
+                xPos = xMax
+
+        # Calculate position
+        pos = xPos,yoffset
+
+        # Update rectangle position and size
+        self.screen.pos = pos
+        self.screen.size = 1 / (2*self._tdis[round(frame_num)-self.adjust]), 1 / self._tdis[round(frame_num)-self.adjust]
+
+        # Log data
         self.h5_log(logger, frame_num,
                             self.p.bg_color,
                             0,
@@ -1156,9 +1209,9 @@ class VideoServer(object):
         """
         self._running = True
 
-        # if self.use_lightcrafter:
-        #     self.framepacker = ProjectorFramePacker(self.mywin)
-        #     self._log.debug('attached framepacker for lightcrafter')
+        if self.use_lightcrafter:
+            self.framepacker = ProjectorFramePacker(self.mywin)
+            self._log.debug('attached framepacker for lightcrafter')
 
         self.synchRect = visual.Rect(win=self.mywin, size=(0.25, 0.25), pos=[0.75, -0.75],
                                      lineColor=None, fillColor='grey')
