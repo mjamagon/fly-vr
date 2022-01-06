@@ -705,7 +705,7 @@ class BackNForth(VideoStim):
                  'size_x',
                  'size_y')
 
-    def __init__(self, filename='sawtooth.mat', offset=(0.2, -0.5), bg_color=-1, fg_color=1,resamp=None,distance=10, **kwargs):
+    def __init__(self, filename='sawtooth.mat', offset=(-0.15,-0.5), bg_color=-1, fg_color=1,resamp=None,distance=10, **kwargs):
         super().__init__(offset=[float(offset[0]), float(offset[1])],
                          bg_color=float(bg_color), fg_color=float(fg_color), **kwargs)
 
@@ -716,8 +716,13 @@ class BackNForth(VideoStim):
         # Resample signal if specified
         if resamp is not None:
             f = resample(f,int(len(f)/resamp))
+            # Create new stim data if it doesn't exist yet
+            dataDir = os.path.dirname(filePath)
+            dataPath = os.path.join(dataDir,f'sawtooth_resample_{resamp}')
+            if not os.path.exists(dataPath):
+                np.save(dataPath,f)
 
-        self._tang = 25*f/90
+        self._tang = 25*f/180
         self._tdis = np.zeros(len(self._tang)) + distance
         self.screen = None
 

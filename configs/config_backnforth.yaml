@@ -1,0 +1,37 @@
+configuration:
+  analog_in_channels:
+    2: 'Copy of y galvo'
+    3: 'Copy of optogenetics'
+    15: 'copy of microphone'
+  analog_out_channels:
+    1: 'LED control for optogenetics'
+  attenuation_file: None
+  delay: 0
+  fictrac_config: max_config_20210708.txt
+  fictrac_console_out: log.txt
+  keepalive_audio: false
+  keepalive_video: false
+  pgr_cam_disable: false
+  phidget_network: false
+  print_defaults: false
+  projector_disable: false
+  remote_2P_disable: true
+  remote_2P_next_disable: true
+  remote_next_2P_channel:
+  remote_start_2P_channel: 0
+  remote_stop_2P_channel: 1
+  samplerate_daq: 10000
+  scanimage_next_start_delay: 1000
+  screen_calibration: calibratedBallImage.data
+  use_RSE: true
+  verbose: false
+  wait: true
+playlist:
+  video:
+    - backnforth:
+        name: 'backnforth'
+        resamp: 3
+time:
+  05.0E3: #in units milliseconds
+    do:
+      - playlist_item: {backend: 'video', identifier: 'backnforth'}
