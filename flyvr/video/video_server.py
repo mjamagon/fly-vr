@@ -761,7 +761,7 @@ class BackNForth(VideoStim):
             rotVel = np.sum(self.rotVel)
 
             #Convert radian to normalized range
-            rotVel/=np.pi
+            rotVel/=2*np.pi
             # print(rotVel)
 
             # Update ball position
