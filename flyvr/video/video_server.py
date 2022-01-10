@@ -738,6 +738,7 @@ class BackNForth(VideoStim):
 
         self.scaling = self.p.scaling # 9.6 for 75 degrees
         self._tang = f/scaling
+        self._tang+=offset[0]
 
         # Stimulus size
         if not pipDist:
@@ -772,6 +773,7 @@ class BackNForth(VideoStim):
             # Get rotational velocity
             fictracState = self.sharedState._fictrac_shmem_state
             ballAngle = self.ballAngle + fictrac_state_to_vec(fictracState)[2]/(2*np.pi)
+            ballAngle = max(-abs(xoffset),min(abs(xoffset),ballAngle))
 
         # If frame_num greater than length of stim, adjust frame num
         if (round(frame_num)+1)%len(self._tang)==0:
@@ -779,7 +781,7 @@ class BackNForth(VideoStim):
             self.adjust = multiple*len(self._tang)
 
         # Stimulus position
-        xPos = ballAngle + self._tang[round(frame_num)-self.adjust]
+        xPos = self._tang[round(frame_num)-self.adjust] + ballAngle
 
         # Constrain x position of target
         xMin,xMax = -1/self.scaling + xoffset, 1/self.scaling + xoffset
@@ -795,8 +797,6 @@ class BackNForth(VideoStim):
                     xPos = xMax
                 elif self.p.overflow=='wrap':
                     xPos = xMin + abs(xMax-xPos)
-            if self.p.CL:
-                self.ballAngle = xPos
         else:
             if self.p.CL:
                 self.ballAngle = ballAngle

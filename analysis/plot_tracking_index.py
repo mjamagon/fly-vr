@@ -49,10 +49,9 @@ def computeTrackingIndex(stimPos,speed,scaling,xOffset,rollWin,exclude=-1):
     - scaling (float): inverse scaling for backnforth angular span
     - rollWin (int): window for computing rolling average
     '''
-    vigor = getMovingAverage(scale(speed[:exclude],0,1),rollWin)
-    fidelity = getMovingAverage(1 - abs(stimPos[:exclude]-xOffset)*scaling,rollWin)
+    vigor = scale(getMovingAverage(speed[:exclude],rollWin),0,1)
+    fidelity = getMovingAverage(1 - abs(stimPos[:exclude])*scaling/2,rollWin)
     trackingIndex = vigor*fidelity
-    #import pdb; pdb.set_trace()
     return trackingIndex
 
 # Read data
@@ -83,7 +82,7 @@ stimPos = np.interp(desiredTime,originalTime,stimPos)
 params = getYaml(rootDir,'config_backnforth.yaml','playlist')['video'][0]['backnforth']
 scaling = params['scaling']
 xOffset = params['offset'][0]
-trackingIndex = computeTrackingIndex(stimPos,rs,scaling,xOffset,400,exclude=-300)
+trackingIndex = computeTrackingIndex(stimPos,rs,scaling,xOffset,60,exclude=-300)
 
 # Plot results
 fig,ax = plt.subplots()
