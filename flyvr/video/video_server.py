@@ -5,6 +5,7 @@ import logging
 import threading
 import collections
 import pkg_resources
+import time
 
 import h5py
 import numpy as np
@@ -707,25 +708,36 @@ class BackNForth(VideoStim):
                  'size_x',
                  'size_y')
 
-    def __init__(self, filename='sawtooth.mat', offset=(-0.15,-0.5), bg_color=-1, fg_color=1,resamp=None,distance=10, CL=False,pipDist=False,**kwargs):
+    # For left hemifield: center at -0.15. Range: -f/8 to f/8
+    # Centered: center at 0.2 Range: -f/4 to f/4
+    def __init__(self, filename='sawtooth.mat', offset=(0.0,-0.5), bg_color=-1, fg_color=1,resamp=None,distance=10,scaling=1,CL=False,pipDist=False,overflow='wrap',**kwargs):
         super().__init__(offset=[float(offset[0]), float(offset[1])],
-                         bg_color=float(bg_color), fg_color=float(fg_color),CL=CL,**kwargs)
+                         bg_color=float(bg_color), fg_color=float(fg_color),CL=CL,scaling=scaling,overflow=overflow,**kwargs)
+
+        def scale(x,r1,r2):
+            return (x-min(x))/(max(x)-min(x)) * (r2-r1) + r1
 
         # Load stimulus position and size
         filePath = package_data_filename(filename)
-        f = loadmat(filePath)
-        f = f['x'].flatten()
+        if filename=='pipStim.mat':
+            f = scale(h5py.File(filePath,'r')['tAng'][:,0],-1,1)
+        else:
+            f = loadmat(filePath)
+            f = f['x'].flatten()
 
         # Resample signal if specified
         if resamp is not None:
             f = resample(f,int(len(f)/resamp))
+
             # Create new stim data if it doesn't exist yet
+            stim = filename.split(".")[0]
             dataDir = os.path.dirname(filePath)
-            dataPath = os.path.join(dataDir,f'sawtooth_resample_{resamp}')
+            dataPath = os.path.join(dataDir,f'{stim}_resample_{resamp}')
             if not os.path.exists(dataPath):
                 np.save(dataPath,f)
 
-        self._tang = f/8 #-45 (left) to 45 degrees (straight ahead)
+        self.scaling = self.p.scaling # 9.6 for 75 degrees
+        self._tang = f/scaling
 
         # Stimulus size
         if not pipDist:
@@ -734,6 +746,9 @@ class BackNForth(VideoStim):
             # Load pipstim too.
             with h5py.File(package_data_filename('pipStim.mat'), 'r') as f:
                 self._tdis = f['tDis'][:, 0]
+
+                if resamp is not None:
+                    self._tdis = resample(self._tdis,int(len(self._tdis)/resamp))
 
         self.screen = None
 
@@ -744,7 +759,7 @@ class BackNForth(VideoStim):
                                   lineColor=None, fillColor=self.p.fg_color)
         self.sharedState = flyvr_shared_state
         self.ballAngle = 0 # angular ball position
-        self.rotVel = collections.deque(maxlen=6)
+        self.rotVel = collections.deque(maxlen=12)
         self.adjust = 0 # protects against index out of bounds error
 
     def update(self, win, logger, frame_num):
@@ -752,38 +767,39 @@ class BackNForth(VideoStim):
         xoffset, yoffset = self.p.offset
 
         # If closed loop, get instantaneous rotational speed
-        rotVel = 0
 
         if self.p.CL:
             # Get rotational velocity
             fictracState = self.sharedState._fictrac_shmem_state
-            self.rotVel.append(fictrac_state_to_vec(fictracState)[2])
-            rotVel = np.sum(self.rotVel)
-
-            #Convert radian to normalized range
-            rotVel/=2*np.pi
-            # print(rotVel)
-
-            # Update ball position
-            ballAngle = self.ballAngle
+            ballAngle = self.ballAngle + fictrac_state_to_vec(fictracState)[2]/(2*np.pi)
 
         # If frame_num greater than length of stim, adjust frame num
         if (round(frame_num)+1)%len(self._tang)==0:
             multiple = (round(frame_num)+1)//len(self._tang)
             self.adjust = multiple*len(self._tang)
 
-        # x position of stimulus
-        xPos = xoffset + rotVel + self._tang[round(frame_num)-self.adjust]
+        # Stimulus position
+        xPos = ballAngle + self._tang[round(frame_num)-self.adjust]
 
         # Constrain x position of target
-        xMin,xMax = -1/8 + xoffset, 1/8 + xoffset
-        if xMin <= xPos <= xMax:
-            self.ballAngle+=rotVel
-        else:
+        xMin,xMax = -1/self.scaling + xoffset, 1/self.scaling + xoffset
+
+        if not xMin <= xPos <= xMax:
             if xPos < xMin:
-                xPos = xMin
+                if self.p.overflow=='clip':
+                    xPos = xMin
+                elif self.p.overflow=='wrap':
+                    xPos = xMax - abs(xMin-xPos)
             elif xPos > xMax:
-                xPos = xMax
+                if self.p.overflow=='clip':
+                    xPos = xMax
+                elif self.p.overflow=='wrap':
+                    xPos = xMin + abs(xMax-xPos)
+            if self.p.CL:
+                self.ballAngle = xPos
+        else:
+            if self.p.CL:
+                self.ballAngle = ballAngle
 
         # Calculate position
         pos = xPos,yoffset
