@@ -760,7 +760,6 @@ class BackNForth(VideoStim):
                                   lineColor=None, fillColor=self.p.fg_color)
         self.sharedState = flyvr_shared_state
         self.ballAngle = 0 # angular ball position
-        self.rotVel = collections.deque(maxlen=12)
         self.adjust = 0 # protects against index out of bounds error
 
     def update(self, win, logger, frame_num):
@@ -773,7 +772,7 @@ class BackNForth(VideoStim):
             # Get rotational velocity
             fictracState = self.sharedState._fictrac_shmem_state
             ballAngle = self.ballAngle + fictrac_state_to_vec(fictracState)[2]/(2*np.pi)
-            ballAngle = max(-abs(xoffset),min(abs(xoffset),ballAngle))
+            ballAngle = max(-abs(1/self.scaling),min(abs(1/self.scaling),ballAngle))
 
         # If frame_num greater than length of stim, adjust frame num
         if (round(frame_num)+1)%len(self._tang)==0:

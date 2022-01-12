@@ -82,7 +82,7 @@ stimPos = np.interp(desiredTime,originalTime,stimPos)
 params = getYaml(rootDir,'config_backnforth.yaml','playlist')['video'][0]['backnforth']
 scaling = params['scaling']
 xOffset = params['offset'][0]
-trackingIndex = computeTrackingIndex(stimPos,rs,scaling,xOffset,60,exclude=-300)
+trackingIndex = computeTrackingIndex(stimPos,rs,scaling,xOffset,60,exclude=-500)
 
 # Plot results
 fig,ax = plt.subplots()
