@@ -4,7 +4,7 @@ import ctypes
 import numpy as np
 
 # The number of FicTrac fields in the output file
-NUM_FICTRAC_FIELDS = 23
+NUM_FICTRAC_FIELDS = 25
 
 
 class SHMEMFicTracState(ctypes.Structure):
@@ -28,6 +28,8 @@ class SHMEMFicTracState(ctypes.Structure):
         ('inty', ctypes.c_double),
         ('timestamp', ctypes.c_double),
         ('seq_num', ctypes.c_int),
+        ('delta_timestamp',ctypes.c_double),
+        ('alt_timestamp',ctypes.c_double)
     ]
 
 
@@ -54,7 +56,9 @@ def fictrac_state_to_vec(s):
                      s.intx,
                      s.inty,
                      s.timestamp,
-                     s.seq_num
+                     s.seq_num,
+                     s.delta_timestamp,
+                     s.alt_timestamp
                      ])
 
 

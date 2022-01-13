@@ -50,7 +50,7 @@ def computeTrackingIndex(stimPos,speed,scaling,xOffset,rollWin,exclude=-1):
     - rollWin (int): window for computing rolling average
     '''
     vigor = scale(getMovingAverage(speed[:exclude],rollWin),0,1)
-    fidelity = getMovingAverage(1 - abs(stimPos[:exclude])*scaling/2,rollWin)
+    fidelity = getMovingAverage(1 - abs(stimPos[:exclude])*scaling,rollWin)
     trackingIndex = vigor*fidelity
     return trackingIndex
 
@@ -69,6 +69,11 @@ stimPos = vid['video']['stimulus']['backnforth'][:,3] # x position of stimulus
 # Tracking vigor (rotational speed)
 rs = abs(dset['fictrac']['output'][:,2])
 
+# Delta timestamps for fictrac
+deltaTimestamps = dset['fictrac']['output'][:,21]
+avgDT = np.mean(np.diff(deltaTimestamps))/1000 # average time/prame (s/frame)
+framesToSmooth = int(3/avgDT) # number of frames for smoothing over 4 second window
+
 # Load video synchronization info
 # Index is vid number, element is fictrac frame
 vidSync = vid['video']['synchronization_info']
@@ -82,7 +87,7 @@ stimPos = np.interp(desiredTime,originalTime,stimPos)
 params = getYaml(rootDir,'config_backnforth.yaml','playlist')['video'][0]['backnforth']
 scaling = params['scaling']
 xOffset = params['offset'][0]
-trackingIndex = computeTrackingIndex(stimPos,rs,scaling,xOffset,60,exclude=-500)
+trackingIndex = computeTrackingIndex(stimPos,rs,scaling,xOffset,framesToSmooth,exclude=-300)
 
 # Plot results
 fig,ax = plt.subplots()
@@ -90,4 +95,3 @@ ax.plot(trackingIndex)
 ax.set_xlabel('fictrac frame')
 ax.set_ylabel('tracking index')
 plt.savefig(f'{rootDir}/tracking_index.png',dpi=300)
-plt.close()

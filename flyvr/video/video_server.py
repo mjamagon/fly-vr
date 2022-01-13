@@ -747,9 +747,7 @@ class BackNForth(VideoStim):
             # Load pipstim too.
             with h5py.File(package_data_filename('pipStim.mat'), 'r') as f:
                 self._tdis = f['tDis'][:, 0]
-
-                if resamp is not None:
-                    self._tdis = resample(self._tdis,int(len(self._tdis)/resamp))
+                self._tdis = resample(self._tdis,int(len(self._tdis)/0.333))
 
         self.screen = None
 
@@ -771,7 +769,7 @@ class BackNForth(VideoStim):
         if self.p.CL:
             # Get rotational velocity
             fictracState = self.sharedState._fictrac_shmem_state
-            ballAngle = self.ballAngle + fictrac_state_to_vec(fictracState)[2]/(2*np.pi)
+            ballAngle = self.ballAngle + fictrac_state_to_vec(fictracState)[2]/(2*np.pi*self.scaling)
             ballAngle = max(-abs(1/self.scaling),min(abs(1/self.scaling),ballAngle))
 
         # If frame_num greater than length of stim, adjust frame num
