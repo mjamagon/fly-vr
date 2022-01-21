@@ -710,7 +710,7 @@ class BackNForth(VideoStim):
 
     # For left hemifield: center at -0.15. Range: -f/8 to f/8
     # Centered: center at 0.2 Range: -f/4 to f/4
-    def __init__(self, filename='sawtooth.mat', offset=(0.0,-0.5), bg_color=-1, fg_color=1,resamp=None,distance=10,scaling=1,CL=False,pipDist=False,overflow='wrap',**kwargs):
+    def __init__(self, filename='sawtooth.mat', offset=(0.0,-0.5), bg_color=0, fg_color=-1,resamp=None,distance=10,scaling=1,CL=False,pipDist=False,overflow='wrap',**kwargs):
         super().__init__(offset=[float(offset[0]), float(offset[1])],
                          bg_color=float(bg_color), fg_color=float(fg_color),CL=CL,scaling=scaling,overflow=overflow,**kwargs)
 
@@ -747,7 +747,7 @@ class BackNForth(VideoStim):
             # Load pipstim too.
             with h5py.File(package_data_filename('pipStim.mat'), 'r') as f:
                 self._tdis = f['tDis'][:, 0]
-                self._tdis = resample(self._tdis,int(len(self._tdis)/0.333))
+                self._tdis = resample(self._tdis,int(len(self._tdis)/resamp))
 
         self.screen = None
 
@@ -765,12 +765,12 @@ class BackNForth(VideoStim):
         xoffset, yoffset = self.p.offset
 
         # If closed loop, get instantaneous rotational speed
-
+        ballAngle = 0
         if self.p.CL:
             # Get rotational velocity
             fictracState = self.sharedState._fictrac_shmem_state
             ballAngle = self.ballAngle + fictrac_state_to_vec(fictracState)[2]/(2*np.pi*self.scaling)
-            ballAngle = max(-abs(1/self.scaling),min(abs(1/self.scaling),ballAngle))
+            ballAngle = max(-abs(1/self.scaling),min(abs(1/self.scaling),ballAngle)) # bound ball angle
 
         # If frame_num greater than length of stim, adjust frame num
         if (round(frame_num)+1)%len(self._tang)==0:
