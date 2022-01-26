@@ -710,9 +710,9 @@ class BackNForth(VideoStim):
 
     # For left hemifield: center at -0.15. Range: -f/8 to f/8
     # Centered: center at 0.2 Range: -f/4 to f/4
-    def __init__(self, filename='sawtooth.mat', offset=(0.0,-0.5), bg_color=0, fg_color=-1,resamp=None,distance=10,scaling=1,CL=False,pipDist=False,overflow='wrap',**kwargs):
+    def __init__(self, filename='sawtooth.mat', offset=(0.0,-0.5), bg_color=0, fg_color=-1,resamp=None,distance=10,scaling=1,CL=False,pipDist=False,overflow='wrap',sizeScale=1,**kwargs):
         super().__init__(offset=[float(offset[0]), float(offset[1])],
-                         bg_color=float(bg_color), fg_color=float(fg_color),CL=CL,scaling=scaling,overflow=overflow,**kwargs)
+                         bg_color=float(bg_color), fg_color=float(fg_color),CL=CL,scaling=scaling,overflow=overflow,sizeScale=float(sizeScale),**kwargs)
 
         def scale(x,r1,r2):
             return (x-min(x))/(max(x)-min(x)) * (r2-r1) + r1
@@ -803,7 +803,7 @@ class BackNForth(VideoStim):
 
         # Update rectangle position and size
         self.screen.pos = pos
-        self.screen.size = 1 / (2*self._tdis[round(frame_num)-self.adjust]), 1 / self._tdis[round(frame_num)-self.adjust]
+        self.screen.size = self.p.sizeScale / (2*self._tdis[round(frame_num)-self.adjust]), self.p.sizeScale / self._tdis[round(frame_num)-self.adjust]
 
         # Log data
         self.h5_log(logger, frame_num,
