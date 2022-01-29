@@ -208,8 +208,8 @@ for subDir in tqdm(subDirs):
         for t in np.sort(np.unique(trialTimestamps))]
     uniqueTimestamps = np.ravel(uniqueTimestamps)
 
-    # Convert rad/frame to mm/s
-    speedConversion = -1/avgDT * 9/(2*np.pi) # will be rad/frame * frame/s * mm/rad -> mm/s
+    # Convert rad/frame to mm/s. 
+    speedConversion = -1/avgDT * (2*np.pi*4.5)/(2*np.pi) # will be rad/frame * frame/s * mm/rad -> mm/s
 
     # If no stim, just plot speed over time
     if noStim:
