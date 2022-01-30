@@ -88,6 +88,7 @@ def chunkData(x,nCycles,dt,peaks=None,nSamples=1000,isSpeed=False,isBacknforth=F
             # If moving stimulus, find the peaks
             else:
                 peaks = find_peaks(abs(x),distance=100)[0][2:]
+
     # Chunk data by peaks
     xChunked = [x[peaks[ii*nPeaks]:peaks[(ii+1)*nPeaks]] for ii,_ in enumerate(peaks) if (ii+1)*nPeaks<len(peaks)]
 
