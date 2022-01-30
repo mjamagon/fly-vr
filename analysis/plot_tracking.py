@@ -64,7 +64,7 @@ def chunkData(x,nCycles,dt,peaks=None,nSamples=1000,isSpeed=False,isBacknforth=F
     if not isSpeed:
         x = scale(x,-1,1)
 
-    # Three peaks per cycle: high, low
+    # Two peaks per cycle: high, low
     nPeaks = 2*nCycles
 
     # Identify peaks in data - peaks in second derivative (discontinuities)
@@ -103,7 +103,7 @@ def getTurningVigor(stimChunks,speedChunks):
     %% Inputs %%
     - stimChunks (array): each row is a stimulus cycle or integer multiple of cycles. zero-centered
     - speedChunks (array): stimulus-aligned speed data (each row is one stimulus period)'''
-    stimSign = np.where(stimChunks>0,1,-1)
+    stimSign = np.where(stimChunks<0,-1,0) # only pull out stimuli presented to male's left eye
     speedSign = -np.where(speedChunks>0,1,-1) # negative because clockwise rotation = left turn
     vigorMask = stimSign==speedSign # check sign consistency
     vigor = [sum(abs(speedRow)[maskRow]) for speedRow,maskRow in zip(speedChunks.copy(),vigorMask)] # speed ipsilateral to grating rotation
@@ -120,9 +120,8 @@ def getFidelity(stimChunks,speedChunks):
     %% Outputs %%
     - fidelity (array): pearson correlation between stimulus position and turning speed
     '''
-    speedChunks = speedChunks.copy()
-    speedChunks/=np.max(abs(speedChunks)) # normalize speed dat a
-    fidelity = [pearsonr(-s,x)[0] for (s,x) in zip(stimChunks,speedChunks)]
+    fidelityMask = np.where(stimChunks<0,1,0).astype(bool) # only pull out stimuli presented to male's left eye
+    fidelity = [pearsonr(-s[mask],x[mask])[0] for (s,x,mask) in zip(stimChunks,speedChunks,fidelityMask)]
     return fidelity
 
 # Root directory
@@ -193,14 +192,19 @@ for subDir in tqdm(subDirs):
         vigor = np.zeros(len(speedChunks))
 
 
-    # # Compute tracking fidelity of tracking experiment
-    # if isBacknforth:
-    #     fidelity = getFidelity(stimChunks,speedChunks)
-    #     TI = vigor*fidelity
-    #
-    # else:
-    #     TI = vigor
-    TI = vigor
+    # Compute tracking fidelity of tracking experiment
+    if isBacknforth and not noStim:
+        fidelity = getFidelity(stimChunks,speedChunks)
+        TI = vigor*fidelity
+
+        # Save tracking index, vigor, and rotational speed
+        np.save(os.path.join(subDir,'tracking_index.npy'),TI)
+        np.save(os.path.join(subDir,'tracking_vigor.npy'),vigor)
+        np.save(os.path.join(subDir,'rotational_speed.npy'),rs)
+
+    else:
+        TI = vigor
+    # TI = vigor
 
     trialIDs = np.arange(len(vigor))
     trialTimestamps = (trialTime*trialIDs/60).astype(int)
@@ -208,8 +212,9 @@ for subDir in tqdm(subDirs):
         for t in np.sort(np.unique(trialTimestamps))]
     uniqueTimestamps = np.ravel(uniqueTimestamps)
 
-    # Convert rad/frame to mm/s. 
-    speedConversion = -1/avgDT * (2*np.pi*4.5)/(2*np.pi) # will be rad/frame * frame/s * mm/rad -> mm/s
+    # Convert rad/frame to rad/s.
+    # speedConversion = -1/avgDT * (2*np.pi*4.5)/(2*np.pi) # will be rad/frame * frame/s * mm/rad -> mm/s
+    speedConversion = -1/avgDT # will be rad/frame * frame/s -> rad/s
 
     # If no stim, just plot speed over time
     if noStim:
@@ -223,10 +228,10 @@ for subDir in tqdm(subDirs):
         ax1.set_ylabel('time (min)')
         divider = make_axes_locatable(ax1)
         cax = divider.append_axes('right', size='5%', pad=0.05)
-        fig.colorbar(im, cax=cax, orientation='vertical',label='rotational speed (mm/s)')
+        fig.colorbar(im, cax=cax, orientation='vertical',label='rotational speed (rad/s)')
         plt.savefig(os.path.join(subDir,'rotational_speed.png'),dpi=300)
         plt.close()
-        continue 
+        continue
 
     # Overlay rotational speed and grating direction
     fig = plt.figure(constrained_layout=True)
@@ -245,12 +250,12 @@ for subDir in tqdm(subDirs):
     ax1.set_ylabel('time (min)')
     divider = make_axes_locatable(ax1)
     cax = divider.append_axes('right', size='5%', pad=0.05)
-    fig.colorbar(im, cax=cax, orientation='vertical',label='rotational speed (mm/s)')
+    fig.colorbar(im, cax=cax, orientation='vertical',label='rotational speed (rad/s)')
     ax2.plot(TI,trialIDs,color='k')
     sns.despine(ax=ax2)
     ax2.invert_yaxis()
     ax2.get_yaxis().set_visible(False)
-    ax2.set_xlabel('tracking vigor (a.u.)')
+    ax2.set_xlabel('tracking index (a.u.)')
     plt.tight_layout()
     plt.savefig(os.path.join(subDir,'tracking_index.png'),dpi=300)
     plt.close()
