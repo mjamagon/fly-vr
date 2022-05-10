@@ -696,7 +696,6 @@ class PipStim(VideoStim):
     def draw(self):
         self.screen.draw()
 
-
 class BackNForth(VideoStim):
     NAME = 'backnforth'
 
@@ -710,7 +709,8 @@ class BackNForth(VideoStim):
 
     # For left hemifield: center at -0.15. Range: -f/8 to f/8
     # Centered: center at 0.2 Range: -f/4 to f/4
-    def __init__(self, filename='sawtooth.mat', offset=(0.0,-0.5), bg_color=0, fg_color=-1,resamp=None,distance=10,scaling=1,CL=False,pipDist=False,overflow='wrap',sizeScale=1,**kwargs):
+    # -1,1 for bright on black
+    def __init__(self, filename='sawtooth.mat', offset=(0.0,-0.5), bg_color=1,fg_color=-1,resamp=None,distance=10,scaling=1,CL=False,pipDist=False,overflow='wrap',sizeScale=1,**kwargs):
         super().__init__(offset=[float(offset[0]), float(offset[1])],
                          bg_color=float(bg_color), fg_color=float(fg_color),CL=CL,scaling=scaling,overflow=overflow,sizeScale=float(sizeScale),**kwargs)
 
@@ -747,7 +747,7 @@ class BackNForth(VideoStim):
             # Load pipstim too.
             with h5py.File(package_data_filename('pipStim.mat'), 'r') as f:
                 self._tdis = f['tDis'][:, 0]
-                self._tdis = resample(self._tdis,int(len(self._tdis)/resamp))
+                self._tdis = resample(self._tdis,int(len(self._tdis)/0.33))
 
         self.screen = None
 
@@ -755,7 +755,7 @@ class BackNForth(VideoStim):
         super().initialize(win, fps, flyvr_shared_state)
         self.screen = visual.Rect(win=win,
                                   size=(0.25, 0.25), pos=self.p.offset,
-                                  lineColor=None, fillColor=self.p.fg_color)
+                                  lineColor=None, fillColor=self.p.fg_color, contrast=1)
         self.sharedState = flyvr_shared_state
         self.ballAngle = 0 # angular ball position
         self.adjust = 0 # protects against index out of bounds error
@@ -1280,13 +1280,13 @@ class VideoServer(object):
                                      '{}_image{:0>5d}.jpg'.format(self.stim.identifier,
                                                                   self.stim.frame_count)))
 
-                if self.sync_signal > 60 * 10:
-                    self.synchRect.fillColor = 'black'
-                    self.sync_signal = 0
-                elif self.sync_signal > 60 * 5:
-                    self.synchRect.fillColor = 'white'
-
-                self.synchRect.draw()
+                # if self.sync_signal > 60 * 10:
+                #     self.synchRect.fillColor = 'black'
+                #     self.sync_signal = 0
+                # elif self.sync_signal > 60 * 5:
+                #     self.synchRect.fillColor = 'white'
+                #
+                # self.synchRect.draw()
                 self.mywin.flip()
 
                 self.samples_played += 1
