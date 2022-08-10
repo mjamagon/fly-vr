@@ -27,6 +27,8 @@ from psychopy.visual.windowframepack import ProjectorFramePacker
 import glob
 import os
 
+from collections import deque
+
 
 H5_SYNC_VERSION = 1
 H5_DATA_VERSION = 1
@@ -815,6 +817,170 @@ class BackNForth(VideoStim):
 
     def draw(self):
         self.screen.draw()
+
+
+class GratingStimOptim(VideoStim):
+    '''Grating stim with RISE-based optimization.'''
+    NAME = 'grating_optim'
+
+    NUM_VIDEO_FIELDS = 9
+    H5_FIELDS = ('video_output_num_frames',
+                 'bg_color',
+                 '?',
+                 'sf',
+                 'stim_size',
+                 'stim_color',
+                 'phase',
+                 'direction',  #'+' or '-'
+                 'speed') # deg/frame
+
+    def __init__(self,sf=50,stim_size=5,stim_color=-1,bg_color=0,direction='+',speed=0.05,**kwargs):
+        super().__init__(sf=int(sf),
+                         stim_size=int(stim_size),
+                         stim_color=int(stim_color),
+                         bg_color=float(bg_color),
+                         direction=str(direction),
+                         speed=speed,
+                         **kwargs)
+        self.screen = None
+
+    def convertStrToInt(self,str):
+        '''Convert string-type direction to int.'''
+        if str=='+':
+            return 1
+        else:
+            return -1
+
+    def initialize(self, win, fps, flyvr_shared_state):
+        super().initialize(win, fps, flyvr_shared_state)
+        self.screen = visual.GratingStim(win=win, size=self.p.stim_size,
+                                         pos=[0, 0], sf=self.p.sf,
+                                         color=self.p.stim_color, phase=0)
+
+        '''Initialize RISE optimizer.'''
+        # Loss function
+        def lossFx(v,direction='+',epsilon=1e-6):
+            if direction=='+':
+                vIpsi = abs(v[v>0])
+            elif direction=='-':
+                vIpsi = abs(v[v<0])
+            else:
+                raise ValueError('invalid direction specified')
+            if len(vIpsi)==0:
+                return -np.log(epsilon)
+            else:
+                return -np.log(np.mean(vIpsi))
+
+        # Optimizer
+        self.rise = RISE(lossFx=lossFx(direction=self.p.direction),\
+            stimRange=[(0.01,0.1)],\
+            sampsPerUpdate=150,\
+            delta=1e-6,\
+            epsilon=1e-4)
+
+    def update(self, win, logger, frame_num):
+        '''Get rotational speed'''
+        fictracState = self.sharedState._fictrac_shmem_state
+        ballAngle = fictrac_state_to_vec(fictracState)[2]
+
+        '''Generate new stimuli given behavior'''
+        self.rise.updateDeque(ballAngle)
+        self.rise.updateParams() # update parameters given behavior
+        speed = self.rise.playStim() # get new stimulus
+
+        '''Update display'''
+        self.screen.setPhase(speed,self.p.direction)
+        self.h5_log(logger, frame_num,
+                            self.p.bg_color,
+                            1,
+                            self.p.sf,
+                            self.p.stim_size,
+                            self.p.stim_color,
+                            self.screen.phase[0],
+                            self.convertStrToInt(self.p.direction),
+                            self.p.speed)
+
+    def draw(self):
+        self.screen.draw()
+
+
+class RISE:
+    def __init__(self,lossFx,stimRange:list,sampsPerUpdate:int,\
+        delta:float,eta:float,**kwargs):
+        '''%% Inputs %%
+        - lossFx: loss function
+        - stimRange: list of tuples specifying lower and upper bound of each parameter's range
+        - sampsPerUpdate: samples used for calculating loss
+        - delta: optimizer hyperparameter
+        - eta: learning rate
+        '''
+        # Make sure hyperparameters are valid
+        assert(delta>0)
+        assert(eta>0)
+
+        # Initialize fields
+        self.stimRange,self.delta,self.eta = nParams,stimRange,delta,eta
+        self.nParams = len(self.stimRange) # number of params to optimize
+        self.v = deque(maxlen=sampsPerUpdate) # recorded animal behavior
+        self.lossFx = lossFx
+        self.unitBall = None
+
+        # Generate starting stimulus set
+        self.x = self._sampleUnitBall()
+
+    def _sampleUnitBall(self):
+        ball = np.random.uniform(low=-1,high=1,size=self.nParams)
+        ball/=np.linalg.norm(randVec) # normalize
+        return ball
+
+    def _calculateLoss(self,**kwargs):
+        loss = self.lossFx(self.v)
+        return loss
+
+    def _calculateGradient(self,unitBall):
+        loss = self._calculateLoss(self.v)
+        grad = (self.nParams/self.delta)*loss*unitBall
+        return grad
+
+    def _normalizeParams(self,x):
+        xNormed = x.copy()
+
+        for ii,rng in enumerate(self.stimRange):
+            lb,ub = rng # lower & upper bound
+            normed = (x[ii]-lb)/(ub-lb)
+            xNormed[ii] = normed
+        return xNormed
+
+    def _denormalizeParams(self,x):
+        xDenormed = x.copy()
+
+        for ii,rng in enumerate(self.stimRange):
+            lb,ub = rng
+            denormed = (ub-lb)*x[ii] + lb
+            xDenormed[ii] = denormed
+        return xDenormed
+
+    def updateDeque(self,vi):
+        '''Update behavior deque with new sample, vi.'''
+        self.v.append(vi)
+
+    def playStim(self):
+        # Return if not enough behavioral samples
+        if len(self.v)<self.sampsPerUpdate:
+            return 0
+        self.unitBall = self._sampleUnitBall()
+        y = self.x + self.delta*self.unitBall # new stim
+        return y
+
+    def updateParams(self):
+        '''Call after calling playStim. Update parameters based
+        on loss observed with played stimulus.'''
+        # Return if not enough behavioral samples
+        if len(self.v)<self.sampsPerUpdate:
+            return
+        grad = self._calculateGradient(self.unitBall) # calculate grad
+        x = self.x - self.eta*grad # update parameters
+        self.x = self._denormalizeParams(x)
 
 class CustomStim(VideoStim):
     NAME = 'customstim'
