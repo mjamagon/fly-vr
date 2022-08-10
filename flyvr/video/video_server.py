@@ -326,7 +326,7 @@ class GratingStim(VideoStim):
                  'direction',  #'+' or '-'
                  'speed') # deg/frame
 
-    def __init__(self,sf=50,stim_size=5,stim_color=-1,bg_color=0.5,direction='+',speed=0.05,**kwargs):
+    def __init__(self,sf=50,stim_size=5,stim_color=-1,bg_color=0,direction='+',speed=0.05,**kwargs):
         super().__init__(sf=int(sf),
                          stim_size=int(stim_size),
                          stim_color=int(stim_color),
@@ -364,6 +364,7 @@ class GratingStim(VideoStim):
 
     def draw(self):
         self.screen.draw()
+
 
 class SweepingSpotStim(VideoStim):
     NAME = 'sweeping_spot'
@@ -1123,18 +1124,18 @@ class VideoServer(object):
 
         self.use_lightcrafter = True
         # if use_lightcrafter:
-            # dlplc = LightCrafterTCP()
-            # self._log.debug("attempting to setup lightcrafter: %r" % dlplc)
-            # if dlplc.connect():
-            #     # noinspection PyBroadException
-            #     try:
-            #         dlplc.cmd_current_display_mode(0x02)
-            #         dlplc.cmd_current_video_mode(frame_rate=60, bit_depth=7, led_color=4)
-            #         self.use_lightcrafter = True
-            #     except Exception:
-            #         self._log.error("error configuring DLP", exc_info=True)
-            # else:
-            #     self._log.warning("could not configure: %r" % dlplc)
+        #     dlplc = LightCrafterTCP()
+        #     self._log.debug("attempting to setup lightcrafter: %r" % dlplc)
+        #     if dlplc.connect():
+        #         # noinspection PyBroadException
+        #         try:
+        #             dlplc.cmd_current_display_mode(0x02)
+        #             dlplc.cmd_current_video_mode(frame_rate=60, bit_depth=7, led_color=4)
+        #             self.use_lightcrafter = True
+        #         except Exception:
+        #             self._log.error("error configuring DLP", exc_info=True)
+        #     else:
+        #         self._log.warning("could not configure: %r" % dlplc)
 
         self._log.info("%sshowing visual stimulus on lightcrafter" % ('' if self.use_lightcrafter else 'not '))
 
@@ -1164,7 +1165,7 @@ class VideoServer(object):
         # 912,1140
         self.mywin = visual.Window([912,1140],
                                    monitor='DLP',
-                                   screen=1 if self.use_lightcrafter else 0,
+                                   screen=2 if self.use_lightcrafter else 0,
                                    useFBO=True, color=0)
         # self._fps = self.mywin.getActualFrameRate()
         self._fps = 60
