@@ -992,7 +992,7 @@ class RISE:
         y = self._normalizeParams(self.x) + self.delta*self.unitBall # normalize stim params when adding unit ball sample
         y = self._denormalizeParams(y) # undo normalization to get back to actual stim range
         self.y = self._projectToSet(y) # clip parameters to keep within valid stim range
-        print(self.x,self.y)
+        print(self.y)
         return self.y
 
     def updateParams(self):
