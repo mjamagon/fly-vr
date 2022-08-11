@@ -853,43 +853,46 @@ class GratingStimOptim(VideoStim):
 
     def initialize(self, win, fps, flyvr_shared_state):
         super().initialize(win, fps, flyvr_shared_state)
+        self.sharedState = flyvr_shared_state
         self.screen = visual.GratingStim(win=win, size=self.p.stim_size,
                                          pos=[0, 0], sf=self.p.sf,
                                          color=self.p.stim_color, phase=0)
 
         '''Initialize RISE optimizer.'''
         # Loss function
-        def lossFx(v,direction='+',epsilon=1e-6):
+        def ipsiTurnLoss(v,direction='+',epsilon=1e-6):
+            v = np.array(v)
+            assert(direction in ['+','-'])
             if direction=='+':
                 vIpsi = abs(v[v>0])
             elif direction=='-':
                 vIpsi = abs(v[v<0])
-            else:
-                raise ValueError('invalid direction specified')
             if len(vIpsi)==0:
                 return -np.log(epsilon)
             else:
-                return -np.log(np.mean(vIpsi))
+                return -np.log(np.sum(vIpsi))
+
+        lossFx = lambda v: ipsiTurnLoss(v,direction=self.p.direction,epsilon=1e-6)
 
         # Optimizer
-        self.rise = RISE(lossFx=lossFx(direction=self.p.direction),\
+        self.rise = RISE(lossFx=lossFx,\
             stimRange=[(0.01,0.1)],\
             sampsPerUpdate=150,\
             delta=1e-6,\
-            epsilon=1e-4)
+            eta=1e-6)
 
-    def update(self, win, logger, frame_num):
+    def update(self,win,logger,frame_num):
         '''Get rotational speed'''
         fictracState = self.sharedState._fictrac_shmem_state
-        ballAngle = fictrac_state_to_vec(fictracState)[2]
+        rs = -fictrac_state_to_vec(fictracState)[2] # left rotation -> right turn
 
         '''Generate new stimuli given behavior'''
-        self.rise.updateDeque(ballAngle)
+        self.rise.updateDeque(rs)
         self.rise.updateParams() # update parameters given behavior
-        speed = self.rise.playStim() # get new stimulus
+        gratingSpeed = self.rise.playStim()[0] # get new stimulus
 
         '''Update display'''
-        self.screen.setPhase(speed,self.p.direction)
+        self.screen.setPhase(gratingSpeed,self.p.direction)
         self.h5_log(logger, frame_num,
                             self.p.bg_color,
                             1,
@@ -906,40 +909,44 @@ class GratingStimOptim(VideoStim):
 
 class RISE:
     def __init__(self,lossFx,stimRange:list,sampsPerUpdate:int,\
-        delta:float,eta:float,**kwargs):
+        delta:float,eta:float,mode:str='rolling',**kwargs):
         '''%% Inputs %%
         - lossFx: loss function
         - stimRange: list of tuples specifying lower and upper bound of each parameter's range
         - sampsPerUpdate: samples used for calculating loss
         - delta: optimizer hyperparameter
         - eta: learning rate
+        - mode: rolling or stiff
         '''
-        # Make sure hyperparameters are valid
+        # Make sure parameters are valid
         assert(delta>0)
         assert(eta>0)
+        assert(mode in ['rolling','stiff'])
 
         # Initialize fields
-        self.stimRange,self.delta,self.eta = nParams,stimRange,delta,eta
+        self.stimRange,self.delta,self.eta = stimRange,delta,eta
+        self.sampsPerUpdate = sampsPerUpdate
         self.nParams = len(self.stimRange) # number of params to optimize
         self.v = deque(maxlen=sampsPerUpdate) # recorded animal behavior
         self.lossFx = lossFx
-        self.unitBall = None
+        self.y = np.zeros(self.nParams) # these are the output stim parameters used to generate stimuli
 
         # Generate starting stimulus set
-        self.x = self._sampleUnitBall()
+        self.x = np.ravel([np.random.uniform(low=stimRange[ii][0],high=stimRange[ii][1],size=1) for ii,_ in enumerate(stimRange)])
+        self.unitBall = self._sampleUnitBall() # hidden parameter set. only used for optimization, not for generating stimuli
 
     def _sampleUnitBall(self):
-        ball = np.random.uniform(low=-1,high=1,size=self.nParams)
-        ball/=np.linalg.norm(randVec) # normalize
-        return ball
+        ballSample = np.random.uniform(low=-1,high=1,size=self.nParams)
+        ballSample/=np.linalg.norm(ballSample) # point on unit ball
+        return ballSample
 
-    def _calculateLoss(self,**kwargs):
+    def _calculateLoss(self):
         loss = self.lossFx(self.v)
         return loss
 
-    def _calculateGradient(self,unitBall):
-        loss = self._calculateLoss(self.v)
-        grad = (self.nParams/self.delta)*loss*unitBall
+    def _calculateGradient(self):
+        loss = self._calculateLoss()
+        grad = (self.nParams/self.delta)*loss*self.unitBall
         return grad
 
     def _normalizeParams(self,x):
@@ -960,17 +967,33 @@ class RISE:
             xDenormed[ii] = denormed
         return xDenormed
 
+    def _projectToSet(self,x):
+        '''Project parameters back onto convex set.'''
+        # Clipping for now; projection onto ball later
+        xProj = x.copy()
+
+        for ii,rng in enumerate(self.stimRange):
+            lb,ub = rng
+            if x[ii]<lb:
+                xProj[ii] = lb
+            elif x[ii]>ub:
+                xProj[ii] = ub
+        return xProj
+
     def updateDeque(self,vi):
         '''Update behavior deque with new sample, vi.'''
         self.v.append(vi)
 
     def playStim(self):
-        # Return if not enough behavioral samples
+        # Return zero vector if not enough behavioral samples
         if len(self.v)<self.sampsPerUpdate:
-            return 0
+            return self.y
         self.unitBall = self._sampleUnitBall()
-        y = self.x + self.delta*self.unitBall # new stim
-        return y
+        y = self._normalizeParams(self.x) + self.delta*self.unitBall # normalize stim params when adding unit ball sample
+        y = self._denormalizeParams(y) # undo normalization to get back to actual stim range
+        self.y = self._projectToSet(y) # clip parameters to keep within valid stim range
+        print(self.x,self.y)
+        return self.y
 
     def updateParams(self):
         '''Call after calling playStim. Update parameters based
@@ -978,9 +1001,8 @@ class RISE:
         # Return if not enough behavioral samples
         if len(self.v)<self.sampsPerUpdate:
             return
-        grad = self._calculateGradient(self.unitBall) # calculate grad
-        x = self.x - self.eta*grad # update parameters
-        self.x = self._denormalizeParams(x)
+        grad = self._calculateGradient() # calculate gradient
+        self.x-=self.eta*grad # update parameters
 
 class CustomStim(VideoStim):
     NAME = 'customstim'
@@ -1268,7 +1290,7 @@ class OptModel(VideoStim):
         self.screen.draw()
 
 
-STIMS = (NoStim, GratingStim, MovingSquareStim, LoomingStim, MayaModel, OptModel, PipStim, SweepingSpotStim,
+STIMS = (NoStim, GratingStim, GratingStimOptim, MovingSquareStim, LoomingStim, MayaModel, OptModel, PipStim, SweepingSpotStim,
          AdamStim, AdamStimGrating, LoomingStimCircle, GenericStaticFixationStim, BackNForth, CustomStim)
 
 
