@@ -220,7 +220,6 @@ for subDir in tqdm(subDirs):
     if isBacknforth and not noStim:
         fidelity = getFidelity(stimChunks,speedChunks)
         TI = vigor*fidelity
-        import pdb; pdb.set_trace()
         # TI[TI<0]=0
 
         # Save tracking index, vigor, and rotational speed

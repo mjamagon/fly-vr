@@ -710,7 +710,7 @@ class BackNForth(VideoStim):
     # For left hemifield: center at -0.15. Range: -f/8 to f/8
     # Centered: center at 0.2 Range: -f/4 to f/4
     # -1,1 for bright on black
-    def __init__(self, filename='sawtooth.mat', offset=(0.0,-0.5), bg_color=1,fg_color=-1,resamp=None,distance=10,scaling=1,CL=False,pipDist=False,overflow='wrap',sizeScale=1,**kwargs):
+    def __init__(self, filename='sawtooth.mat', offset=(0.0,-0.5), bg_color=255,fg_color=-1,resamp=None,distance=10,scaling=1,CL=False,pipDist=False,overflow='wrap',sizeScale=1,**kwargs):
         super().__init__(offset=[float(offset[0]), float(offset[1])],
                          bg_color=float(bg_color), fg_color=float(fg_color),CL=CL,scaling=scaling,overflow=overflow,sizeScale=float(sizeScale),**kwargs)
 
@@ -811,6 +811,70 @@ class BackNForth(VideoStim):
                             0,
                             self.screen.pos[0], self.screen.pos[1],
                             self.screen.size[0], self.screen.size[1])
+
+    def draw(self):
+        self.screen.draw()
+
+class ContrastStim(VideoStim):
+    NAME = 'contrast'
+
+    H5_FIELDS = ('video_output_num_frames',
+                 'bg_color',
+                 '?',
+                 'pos_x',
+                 'pos_y',
+                 'size_x',
+                 'size_y')
+    '''Change contrast with statistics drawn from mfDist.
+    For control experiments to see if fly only cares about overall luminance.'''
+
+    def __init__(self,offset=(0.0,-0.5),size_scale=1, bg_color=255,fg_color=-1,resamp=None,**kwargs):
+        super().__init__(offset=[float(offset[0]), float(offset[1])],
+                         bg_color=float(bg_color),fg_color=float(fg_color),size_scale=size_scale,**kwargs)
+
+        def scale(x,r1,r2):
+            '''Scale between r1 and r2.'''
+            return (x-min(x))/(max(x)-min(x)) * (r2-r1) + r1
+
+        # Stimulus size
+        with h5py.File(package_data_filename('pipStim.mat'), 'r') as f:
+            self._tdis = f['tDis'][:, 0] # distance component of pipstim
+            self._tdis = resample(self._tdis,int(len(self._tdis)/0.33)) # stretch data 3x to compensate for frame packing
+            self._tdis = 1-scale(self._tdis,0,1) # scale contrast between 0 and 1. contrast is highest when distance is small
+
+        self.screen = None
+
+    def initialize(self, win, fps, flyvr_shared_state):
+        super().initialize(win, fps, flyvr_shared_state)
+        self.screen = visual.Rect(win=win,
+                                  size=(0.25, 0.25), pos=self.p.offset,
+                                  lineColor=None, fillColor=self.p.fg_color, contrast=1)
+        self.sharedState = flyvr_shared_state
+        self.adjust = 0 # protects against index out of bounds error
+
+    def update(self, win, logger, frame_num):
+        win.color = self.p.bg_color
+        xoffset, yoffset = self.p.offset
+
+        # If frame_num greater than length of stim, adjust frame num
+        if (round(frame_num)+1)%len(self._tdis)==0:
+            multiple = (round(frame_num)+1)//len(self._tdis)
+            self.adjust = multiple*len(self._tdis)
+
+        # Stimulus position
+        contrast = self._tdis[round(frame_num)-self.adjust]
+        self.screen.contrast = contrast # set contrast in range (0,1)
+
+        # Update rectangle position and size
+        self.screen.pos = xoffset,yoffset
+        self.screen.size = self.p.sizeScale,self.p.sizeScale
+
+        # Log data
+        self.h5_log(logger, frame_num,
+                            self.p.bg_color,
+                            0,
+                            self.screen.pos[0],self.screen.pos[1],
+                            contrast,contrast)
 
     def draw(self):
         self.screen.draw()
@@ -1101,7 +1165,7 @@ class OptModel(VideoStim):
         self.screen.draw()
 
 
-STIMS = (NoStim, GratingStim, MovingSquareStim, LoomingStim, MayaModel, OptModel, PipStim, SweepingSpotStim,
+STIMS = (NoStim, ContrastStim, GratingStim, MovingSquareStim, LoomingStim, MayaModel, OptModel, PipStim, SweepingSpotStim,
          AdamStim, AdamStimGrating, LoomingStimCircle, GenericStaticFixationStim, BackNForth, CustomStim)
 
 
