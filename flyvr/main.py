@@ -78,6 +78,7 @@ def main_fictrac():
 
 def main_launcher():
     options = parse_arguments()
+    import pdb; pdb.set_trace()
     # flip the default vs the individual launchers - wait for all of the backends
     options.wait = True
 

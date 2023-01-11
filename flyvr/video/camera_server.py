@@ -348,6 +348,11 @@ class _InitError(Exception):
     pass
 
 
+class TriggerType:
+    SOFTWARE = 1
+    HARDWARE = 2
+
+
 class _Camera(object):
 
     def __init__(self, cam):
@@ -389,7 +394,7 @@ class _Camera(object):
         assert frame.ndim == 2
 
         fn = image_result.GetFrameID()
-        ts = image_result.GetTimeStamp() / 1e9
+        ts = image_result.GutTimeStamp() / 1e9
         image_result.Release()
 
         self._t1 = self._t1 or ts
@@ -405,6 +410,7 @@ class _Camera(object):
                                              cam_node_arg=cam_node_arg,
                                              pyspin_mode_str=pyspin_mode_str,
                                              log=self._log)
+
 
     def start(self, **camera_options):
         # this lower level acq stop command works in more cases than EndAcquisition
@@ -426,6 +432,10 @@ class _Camera(object):
                 self._log.error("error setting property '%s'" % k, exc_info=True)
 
         self._log.info('starting acquisition')
+
+        # Configure triggering , execute trigger, and begin acquiring images ## 
+        self.configure_camera_trigger(self._cam)
+        self._cam.TriggerSoftware.Execute() # trigger camera 
         self._cam.BeginAcquisition()
         self._t0 = time.time()
 

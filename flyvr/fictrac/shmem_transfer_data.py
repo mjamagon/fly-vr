@@ -1,6 +1,5 @@
 import mmap
 import ctypes
-
 import numpy as np
 
 # The number of FicTrac fields in the output file
