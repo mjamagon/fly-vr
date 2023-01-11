@@ -9,114 +9,89 @@ from flyvr.common.ipc import PlaylistReciever, CommonMessages
 import cv2
 import os
 import threading
+from threading import Thread
 
-def threaded(fn):
-    def wrapper(*args, **kwargs):
-        threading.Thread(target=fn, args=args, kwargs=kwargs).start()
-    return wrapper
-
-class Recorder:
-    def __init__(self,camera,compressionType:int,fileName:str):
-        assert compressionType in [0,1,2]
-        self.recorder = PySpin.SpinVideo()
+class Recorder(threading.Thread):
+    def __init__(self,camera,fileName:str):
+        Thread.__init__(self)
+        self.daemon = True
         self.fileName = fileName
         self.camera = camera 
         self.isAlive = True
+        self._lock = threading.Lock()
 
-        # # Set compression mode
-        # if compressionType==0:
-        #     self.option = PySpin.AVIOption()
-        # elif compressionType==1: # mjpg compression
-        #     self.option= PySpin.MJPGOption()
-        #     self.option.quality=75
-        # elif compressionType==2: # h264 compression
-        #     self.option = PySpin.H264Option()
-
+       # Initialize recorder 
+        self._open_recorder()
 
     def _open_recorder(self):
         # self.recorder.Open(self.fileName,self.option) 
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         savePath = os.path.join(self.fileName,'secondary.mp4')
-        self.vidWrite = cv2.VideoWriter(savePath,fourcc,frameSize=(560,560),fps=75)
+        self.vidWrite = cv2.VideoWriter(savePath,fourcc,isColor=False,frameSize=(560,560),fps=75)
 
     def _close_recorder(self):
-        # self.recorder.Close()
+        print('shutting down camera recording...')
         self.vidWrite.release()
+        self.isAlive = False
+
+    def run(self):
+        while self.isAlive: 
+            # print('doing',flush=True)
+            try:
+                with self._lock:
+                    image = self.camera.GetNextImage()
+                    image = image.Convert(PySpin.PixelFormat_Mono8,PySpin.HQ_LINEAR)
+                    imageArray = image.GetNDArray() # get data from pointer as numpy array
+                    self.vidWrite.write(imageArray)
+            except Exception as e:
+                print(e,flush=True)
+
+# class Recorder():
+#     def __init__(self,camera,fileName:str):
+#         self.fileName = fileName
+#         self.camera = camera 
+#         self.isAlive = True
         
-    @threaded
-    def acquire_images(self):
-        # start AVI recorder 
+#        # Initialize recorder 
+#         self._open_recorder()
 
-        # import pdb; pdb.set_trace()
-        self._open_recorder()
+#     def _open_recorder(self):
+#         # self.recorder.Open(self.fileName,self.option) 
+#         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+#         savePath = os.path.join(self.fileName,'secondary.mp4')
+#         self.vidWrite = cv2.VideoWriter(savePath,fourcc,isColor=0,frameSize=(560,560),fps=75)
 
-        while self.isAlive:
-            image = self.camera.GetNextImage()
-            image = image.Convert(PySpin.PixelFormat_Mono8,PySpin.HQ_LINEAR)
-            imageArray = image.GetNDArray() # get data from pointer as numpy array
-            # self.recorder.Append(image)
-            self.vidWrite.write(imageArray)
+#     def _close_recorder(self):
+#         # self.recorder.Close()
+#         self.vidWrite.release()
 
-        print('Closing recorder...')
-        # self.recorder.close_recorder()   
-        self.vidWrite.release()
+#     def run(self):
+#         for _ in range(50):
+#             print('doing',flush=True)
+#             try:
+#                 image = self.camera.GetNextImage()
+#                 image = image.Convert(PySpin.PixelFormat_Mono8,PySpin.HQ_LINEAR)
+#                 imageArray = image.GetNDArray().astype(np.uint8) # get data from pointer as numpy array
+#                 self.vidWrite.write(imageArray)
+#                 # import pdb; pdb.set_trace()
+#             except Exception as e:
+#                 print(e,flush=True)
+#         self._close_recorder()
 
+class Camera:
+    def __init__(self,camera,nodemap):
+        self.camera = camera
+        self.nodemap = nodemap
+        self.recorder = None
 
-class Camera_Server:
-    def __init__(self,options:dict):
-        assert 'snPrimary' and 'snSecondary' and 'fileName' in options
-        self.options = options
-
-    # def setup_camera(self,sn):
-    #     '''Find camera'''
-    #     system = PySpin.System.GetInstance()
-    #     cam_list = system.GetCameras()
-    #     cam = cam_list.GetBySerial(self.options['snPrimary'])
-    #     return cam
-
-    def acquire_images(self,recorder):
-        # start AVI recorder 
-        recorder = Recorder(compressionType=2,fileName=self.options['savePath'])
-        recorder.open_recorder()
-
-        while self.isAlive:
-            image = self.secondaryCam.GetNextImage()
-            image = image.Convert(PySpin.PixelFormat_Mono8,PySpin.HQ_LINEAR)
-            # imageArray = image.GetNDArray() # get data from pointer as numpy array
-            recorder.recorder.AVIappend(image)
-
-        recorder.close_recorder()
-       
-    def run_server(self):
-        # Find the primary camera and initialize 
-        system = PySpin.System.GetInstance()
-        cam_list = system.GetCameras()
-        primaryCam = cam_list.GetBySerial(self.options['snPrimary'])
-        # primaryCam = self.setup_camera(self.options['snPrimary'])
-        primaryCam.Init()
-        self.primaryCam=primaryCam
-
-        ''' %% Trigger the primary camera to initialize the recording %% '''
-        # Trigger the primary camera
-        _ = self.configure_trigger()
-
-        # Get nodemap 
-        nodemap = self.primaryCam.GetNodeMap()
-    
-        # Execute a software trigger 
-        self.execute_trigger(nodemap)
-
-        ''' %% Start recording from the secondary camera %% '''
-        # First find and initialize the secondary camera 
-        secondaryCam = cam_list.GetBySerial(self.options['snSecondary'])
-        secondaryCam.Init()
-        secondaryCam.BeginAcquisition()
-        self.secondaryCam = secondaryCam
+    def start_recording(self,fileName):
+        print('starting camera recording...',flush=True)
 
         # Acquire and save images 
-        recorder = Recorder(camera=secondaryCam,fileName=self.options['fileName'],compressionType=2)
-        recorder.acquire_images()
-        # self.acquire_images()
+        self.camera.BeginAcquisition()
+        recorder = Recorder(camera=self.camera,fileName=fileName)
+        recorder.start()
+        self.recorder = recorder
 
         
     def configure_trigger(self):
@@ -133,7 +108,7 @@ class Camera_Server:
         %% Notes %%
         Modified from https://github.com/nimble00/PTGREY-cameras-with-python/blob/master/Trigger_QuickSpin.py
         """
-        cam = self.primaryCam
+        cam = self.camera
         result = True
         CHOSEN_TRIGGER = 1
 
@@ -203,7 +178,8 @@ class Camera_Server:
 
         return result
 
-    def execute_trigger(self,nodemap):
+    def execute_trigger(self):
+        nodemap = self.nodemap
         node_softwaretrigger_cmd = PySpin.CCommandPtr(nodemap.GetNode("TriggerSoftware"))
 
         if not PySpin.IsAvailable(node_softwaretrigger_cmd) or not PySpin.IsWritable(node_softwaretrigger_cmd):
@@ -233,15 +209,32 @@ if __name__ == "__main__":
         'snPrimary':'15058177',
         'snSecondary':'17215641',
         'fileName':"D:\max_flyvr\camera_sync"
-        # 'fileName':'test'
     }
-    server =Camera_Server(options=options)
-    server.run_server()
-    # time.sleep(2)
+
+    # Get primary camera 
+    system = PySpin.System.GetInstance()
+    cam_list = system.GetCameras()
+    cam1 = cam_list.GetBySerial(options['snPrimary'])
+    cam1.Init()
+    nodemap1 = cam1.GetNodeMap()
+    primaryCam = Camera(cam1,nodemap1) 
+    primaryCam.configure_trigger()
+    primaryCam.execute_trigger()
+
+    # Get secondary camera
+    cam2 = cam_list.GetBySerial(options['snSecondary'])
+    cam2.Init() 
+    nodemap2 = cam2.GetNodeMap()
+    secondaryCam = Camera(cam2,nodemap2) 
+
+    # Record for five seconds 
+    secondaryCam.start_recording(fileName=options['fileName'])
     t0 = time.time()
     t1 = time.time()
-    while t1-t0<10:
-        t1 = time.time()
+    while t1-t0<5:
         print(t1-t0)
-        continue
-    server.recorder.isAlive = False
+        t1 = time.time()
+    secondaryCam.recorder._close_recorder()
+    print('Done!')
+
+

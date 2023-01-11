@@ -20,7 +20,7 @@ from flyvr.fictrac.replay import FicTracDriverReplay
 from flyvr.hwio.phidget import run_phidget_io
 from flyvr.common.ipc import run_main_relay
 from flyvr.gui import run_main_state_gui
-
+from flyvr.video.camera_triggering import *
 
 def _get_fictrac_driver(options, log):
     drv = None
@@ -78,10 +78,9 @@ def main_fictrac():
 
 def main_launcher():
     options = parse_arguments()
-    import pdb; pdb.set_trace()
     # flip the default vs the individual launchers - wait for all of the backends
     options.wait = True
-
+    # import pdb; pdb.set_trace()
     # save the total state
     _opts = get_printable_options_dict(options, include_experiment_and_playlist=True)
     with open(options.record_file.replace('.h5', '.config.yml'), 'wt') as f:
@@ -101,10 +100,32 @@ def main_launcher():
 
     backend_wait = [BACKEND_FICTRAC]
 
+    ''' %%% second camera setup %%%'''
+    if options.second_camera:
+        # Get primary camera 
+        system = PySpin.System.GetInstance()
+        cam_list = system.GetCameras()
+        cam1 = cam_list.GetBySerial(options.snPrimary)
+        cam1.Init()
+        nodemap1 = cam1.GetNodeMap()
+        primaryCam = Camera(cam1,nodemap1) 
+        primaryCam.configure_trigger()
+        primaryCam.execute_trigger()
+
+        # Get secondary camera
+        cam2 = cam_list.GetBySerial(options.snSecondary)
+        cam2.Init() 
+        nodemap2 = cam2.GetNodeMap()
+        secondaryCam = Camera(cam2,nodemap2) 
+
     trac_drv = _get_fictrac_driver(options, log)
     if trac_drv is not None:
         fictrac_task = ConcurrentTask(task=trac_drv.run, comms=None, taskinitargs=[options])
         fictrac_task.start()
+
+        ## try starting secondary camera acquisition ## 
+        if options.second_camera:
+            secondaryCam.start_recording(fileName=os.path.dirname(options._config_file_path))        
 
         # wait till fictrac is processing frames
         flyvr_shared_state.wait_for_backends(BACKEND_FICTRAC)
@@ -138,10 +159,9 @@ def main_launcher():
         audio = None
         log.info('not starting video backend (playlist empty or keepalive_video not specified)')
 
-    if options.camera_serial:
-        camera = ConcurrentTask(task=run_camera_server, comms=None, taskinitargs=[options])
-        backend_wait.append(BACKEND_CAMERA)
-        camera.start()
+        # camera = ConcurrentTask(task=run_camera_server, comms=None, taskinitargs=[options])
+        # backend_wait.append(BACKEND_CAMERA)
+        # camera.start()
 
     log.info('waiting %ss for %r to be ready' % (60, backend_wait))
     if flyvr_shared_state.wait_for_backends(*backend_wait, timeout=60):
@@ -160,6 +180,10 @@ def main_launcher():
             try:
                 inputimeout('\n---------------\nPress any key to finish\n---------------\n\n' if i == 0 else '', 1)
                 flyvr_shared_state.signal_stop().join(timeout=5)
+                
+                ''' If there's a second camera, stop recording'''
+                if options.second_camera:
+                    secondaryCam.recorder._close_recorder()
                 break
             except TimeoutOccurred:
                 if flyvr_shared_state.is_stopped():
@@ -170,6 +194,7 @@ def main_launcher():
         log.error('not all required backends became ready - please check logs for '
                   'error messages')
         flyvr_shared_state.signal_stop()
+
 
     log.info('stopped')
 

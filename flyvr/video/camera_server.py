@@ -394,7 +394,7 @@ class _Camera(object):
         assert frame.ndim == 2
 
         fn = image_result.GetFrameID()
-        ts = image_result.GutTimeStamp() / 1e9
+        ts = image_result.GetTimeStamp() / 1e9
         image_result.Release()
 
         self._t1 = self._t1 or ts
@@ -434,8 +434,8 @@ class _Camera(object):
         self._log.info('starting acquisition')
 
         # Configure triggering , execute trigger, and begin acquiring images ## 
-        self.configure_camera_trigger(self._cam)
-        self._cam.TriggerSoftware.Execute() # trigger camera 
+        # self.configure_camera_trigger(self._cam)
+        # self._cam.TriggerSoftware.Execute() # trigger camera 
         self._cam.BeginAcquisition()
         self._t0 = time.time()
 
