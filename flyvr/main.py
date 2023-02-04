@@ -105,12 +105,12 @@ def main_launcher():
         # Get primary camera 
         system = PySpin.System.GetInstance()
         cam_list = system.GetCameras()
-        cam1 = cam_list.GetBySerial(options.snPrimary)
-        cam1.Init()
-        nodemap1 = cam1.GetNodeMap()
-        primaryCam = Camera(cam1,nodemap1) 
-        primaryCam.configure_trigger()
-        primaryCam.execute_trigger()
+        # cam1 = cam_list.GetBySerial(options.snPrimary)
+        # cam1.Init()
+        # nodemap1 = cam1.GetNodeMap()
+        # primaryCam = Camera(cam1,nodemap1) 
+        # primaryCam.configure_trigger()
+        # primaryCam.execute_trigger()
 
         # Get secondary camera
         cam2 = cam_list.GetBySerial(options.snSecondary)

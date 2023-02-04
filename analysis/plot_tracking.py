@@ -67,8 +67,8 @@ def chunkData(x,nCycles,dt,peaks=None,nSamples=1000,isSpeed=False,isBacknforth=F
     if not isSpeed:
         x = scale(x,-1,1)
 
-    # Two peaks per cycle: high, low
-    nPeaks = 2*nCycles
+    # three peaks per cycle: high, low, high
+    nPeaks = 2*nCycles # number of peaks *after* first peak -> three peaks
 
     # Identify peaks in data - peaks in second derivative (discontinuities)
     if peaks is None:
@@ -93,10 +93,11 @@ def chunkData(x,nCycles,dt,peaks=None,nSamples=1000,isSpeed=False,isBacknforth=F
                 peaks = find_peaks(abs(x),distance=100)[0]
 
     # Chunk data by peaks
-    xChunked = [x[peaks[ii*nPeaks]:peaks[(ii+1)*nPeaks]] for ii,_ in enumerate(peaks) if (ii+1)*nPeaks<len(peaks)]
+    # xChunked = [x[np.arange(peaks[ii*(nPeaks-1)],peaks[ii*(nPeaks-1)+nPeaks])] for ii,_ in enumerate(peaks) if ii*(nPeaks-1)+nPeaks<len(peaks)]
+    xChunked = [x[peaks[ii*(nPeaks)]:peaks[nPeaks*(ii+1)]] for ii,_ in enumerate(peaks) if ii*(nPeaks)+nPeaks<len(peaks)]
 
     # Compute average time per trial
-    avgTrialTime = np.mean([peaks[(ii+1)*nPeaks] -peaks[ii*nPeaks] for ii,_ in enumerate(peaks) if (ii+1)*nPeaks<len(peaks)])*dt
+    avgTrialTime = dt*np.mean([peaks[ii*(nPeaks)+nPeaks] - peaks[ii*(nPeaks)] for ii,_ in enumerate(peaks) if ii*(nPeaks)+nPeaks<len(peaks)])
 
     # Resample chunked data to equalize samples per row
     xResampled = resampleRows(xChunked,nSamples=nSamples)
@@ -191,18 +192,6 @@ for subDir in tqdm(subDirs):
     desiredTime = np.arange(len(rs)) # want one vid frame for each fictrac frame
     stimDirection = np.interp(desiredTime,originalTime,stimDirection)
 
-    # ####
-    # stimDirection = 2*(stimDirection-np.min(stimDirection))\
-    #     /(np.max(stimDirection)-np.min(stimDirection)) - 1
-    # import pdb; pdb.set_trace()
-
-    # During time before stimulus, pretend there are stimulus cycles
-    # so we can look at baseline tracking index.
-    peaks = find_peaks(abs(stimDirection),distance=100)[0]
-    if len(peaks)>0:
-        stimDirection[:peaks[0]] = stimDirection[peaks[0]:2*peaks[0]]
-
-    # Chunk grating direction
     nCycles = args.nCycles
     stimChunks,peaks,trialTime = chunkData(stimDirection,nCycles=nCycles,dt=avgDT,nSamples=args.nSamples,isBacknforth=isBacknforth)
 
