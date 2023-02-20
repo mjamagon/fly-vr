@@ -141,6 +141,7 @@ def build_argparser(savefilename=None):
     parser.add_argument('--second_camera',type=bool,default=False,help='flag to indicate if a second camera is present')
     parser.add_argument('--snPrimary',type=str,help='primary camera serial number')
     parser.add_argument('--snSecondary',type=str,help='secondary camera serial number')
+    parser.add_argument('--actuatorCom',type=str,help='actuator COM port')
 
     return parser
 

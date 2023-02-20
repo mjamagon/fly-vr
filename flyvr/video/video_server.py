@@ -28,6 +28,15 @@ import glob
 import os
 
 
+from zaber_motion import Units
+from zaber_motion.ascii import Connection
+from zaber_motion.gcode import DeviceDefinition
+import numpy as np
+from scipy.io import loadmat
+import time
+from matplotlib import pyplot as plt 
+from zaber_motion import Measurement
+
 H5_SYNC_VERSION = 1
 H5_DATA_VERSION = 1
 
@@ -298,6 +307,122 @@ class VideoStim(object):
             raise Exception('incorrect row %r for defined fields: %r' % (row, self.H5_FIELDS))
 
         logger.log(self._h5_log_name, np.array(row, dtype=np.float64))
+
+class ActuatorStim(VideoStim):
+    NAME = 'actuator'
+
+    H5_FIELDS = ('video_output_num_frames',
+                 'bg_color',
+                 '?',
+                 'forward_distance',
+                 'lateral_distance',
+                 'size_x',
+                 'size_y')
+    '''Control a real female on an actuator.'''
+
+    def __init__(self,filePath='sawtooth.mat',angleScaling:float=1,**kwargs):
+        '''%% Inputs %%
+       - angleScaling: how much to scale down the side to side motion of the female
+       ''' 
+        super().__init__(**kwargs)
+
+        # mfDist data
+        dataPath = package_data_filename('tracking.mat')
+        dset = loadmat(dataPath)
+        fFV = dset['features']['fFV'][0][0]
+        mfDist = dset['features']['mfDist'][0][0]
+        self.mfDist = self.convert_px_mm(mfDist)
+        self.fFV = abs(self.convert_px_f_2_px_s(fFV)) # positive velocity -> move away
+        
+        # load backnforth component
+        f = loadmat(package_data_filename(filePath))
+        self.femaleAngle = f['x'].flatten()/angleScaling
+        
+        # set the device max speed
+        DeviceDefinition.max_speed = Measurement(value=np.max(self.fFV),unit=Units.LENGTH_MILLIMETRES)
+
+        # get connection
+        self.connection = Connection.open_serial_port(kwargs['connection'])
+        try:
+            device_list = self.connection.detect_devices()
+            device = device_list[0]
+            self.axisX = device.get_axis(1)
+            self.axisY = device.get_axis(2)
+        except:
+            raise AttributeError('no connection')
+            
+
+    def convert_px_f_2_px_s(self,x):
+        '''Convert units in pixels/frame to mm/s'''
+        mm_frame = x*42./780.8203
+        mm_sec = 60*mm_frame
+        return mm_sec
+
+    def convert_px_mm(self,x):
+        '''Convert px to mm'''
+        mm = x*42./780.8203
+        return mm 
+
+    def clip_range(self,x,maxRange:int=25):
+        '''Clip mfDist range to fit into actuator range (max of 25mm)'''
+        return min(x,maxRange)
+
+    def map_distance(self,x,maxRange:int=25):
+        '''Map distance. Actuator is farthest away at mininum (by design)'''
+        return max(maxRange-x,0)
+
+    def map_lateral(self,x:float,originalRange:tuple=(-1,1),newRange:tuple=(0,25)):
+        '''Map input range (-1,1) to actuator range (0-25)
+        %% Inputs %%
+        - x: lateral distance
+        - originalRange: original range
+        - newRange: new range
+        %% Outputs %% 
+        - mappedX: mapped lateral distance
+        '''
+        min0,max0 = originalRange
+        min1,max1 = newRange
+        mapRange = lambda x: (x-min0)*(max1-min1)/(max0-min0) + min1
+        mappedX = mapRange(x)
+        return mappedX
+
+
+    def initialize(self, win, fps, flyvr_shared_state):
+        super().initialize(win, fps, flyvr_shared_state)
+        self.sharedState = flyvr_shared_state
+        
+        # device list 
+        # connection = self.connection
+        # device_list = connection.detect_devices()
+        # self.axisX = device_list[0]
+        # self.axisY = device_list[1]
+            
+        # move x axis to closest position and y axis to middle 
+        self.axisX.move_absolute(12.5,Units.LENGTH_MILLIMETRES)
+        self.axisY.move_absolute(25,Units.LENGTH_MILLIMETRES)
+
+
+    def update(self, win, logger, frame_num):
+
+        # get forward and lateral male-female distance
+        distance = self.map_distance(self.clip_range(self.mfDist[frame_num])) # forward distance
+        lateral = self.map_lateral(self.femaleAngle[frame_num]) # lateral distance 
+
+        # move actuators 
+        self.axisX.move_absolute(lateral,Units.LENGTH_MILLIMETRES,wait_until_idle = False)
+        self.axisY.move_absolute(distance,Units.LENGTH_MILLIMETRES,wait_until_idle = False)
+
+        # Log data
+        self.h5_log(logger, frame_num,
+                            0,
+                            0,
+                            distance,
+                            lateral,
+                            0,0)
+
+    def draw(self):
+        # self.screen.draw()
+        return
 
 
 class NoStim(VideoStim):
@@ -1166,7 +1291,7 @@ class OptModel(VideoStim):
 
 
 STIMS = (NoStim, ContrastStim, GratingStim, MovingSquareStim, LoomingStim, MayaModel, OptModel, PipStim, SweepingSpotStim,
-         AdamStim, AdamStimGrating, LoomingStimCircle, GenericStaticFixationStim, BackNForth, CustomStim)
+         AdamStim, AdamStimGrating, LoomingStimCircle, GenericStaticFixationStim, BackNForth, ActuatorStim, CustomStim)
 
 
 def stimulus_factory(name, **params):
@@ -1244,6 +1369,8 @@ class VideoServer(object):
         self.flyvr_shared_state.logger.log("/video/synchronization_info",
                                            H5_SYNC_VERSION,
                                            attribute_name='__version')
+
+        # import pdb; pdb.set_trace()
 
     # This is how many records of calls to the callback function we store in memory.
     CALLBACK_TIMING_LOG_SIZE = 10000
@@ -1406,7 +1533,7 @@ def _ipc_main(q):
     log.debug('exiting')
 
 
-def run_video_server(options):
+def run_video_server(options,connection=None):
     from flyvr.common import SharedState, Randomizer
     from flyvr.common.logger import DatasetLogServerThreaded
 
@@ -1429,7 +1556,13 @@ def run_video_server(options):
                 option_item_defn = {id_: defn}
                 continue
 
+            # if connection is not None:
+                #defn['connection'] = connection
+                # stimulus = stimulus_factory(defn.pop('name'), identifier=id_, **defn)
+                # stims.append(stimulus)
+            defn['connection'] = connection
             stims.append(stimulus_factory(defn.pop('name'), identifier=id_, **defn))
+
 
         random = Randomizer.new_from_playlist_option_item(option_item_defn,
                                                           *[s.identifier for s in stims])

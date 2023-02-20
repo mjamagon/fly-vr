@@ -1,9 +1,11 @@
 import time
 import sys
 
-from multiprocessing import Process, Pipe, Manager
+# from multiprocessing import Process, Pipe, Manager
+from multiprocess import Process, Pipe, Manager
 # noinspection PyUnresolvedReferences
-from multiprocessing.dummy import Process as _DummyProcess, Queue as _DummyQueue, Pipe as _DummyPipe
+# from multiprocessing.dummy import Process as _DummyProcess, Queue as _DummyQueue, Pipe as _DummyPipe
+from multiprocess.dummy import Process as _DummyProcess, Queue as _DummyQueue, Pipe as _DummyPipe
 
 
 class _DummyProcessDaemonThread(_DummyProcess):
