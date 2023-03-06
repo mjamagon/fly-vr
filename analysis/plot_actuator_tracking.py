@@ -1,3 +1,4 @@
+
 import numpy as np
 from matplotlib import pyplot as plt
 import h5py
@@ -19,7 +20,6 @@ description = '''Plot tracking index for experiment.'''
 parser.add_argument('--dir',type=str,required=True,help='directory containing experiments, or directory for single experiment')
 parser.add_argument('--nCycles',type=int,default=3,help='number of stimulus cycles per trial')
 parser.add_argument('--nSamples',type=int,default=1000,help='samples per trial (resampled)')
-parser.add_argument('--nChunks',type=int,default=10,help='# chunks for examining average speed')
 
 args = parser.parse_args()
 
@@ -125,11 +125,7 @@ def getFidelity(stimChunks,speedChunks):
     %% Outputs %%
     - fidelity (array): pearson correlation between stimulus position and turning speed
     '''
-    # stimChunks = np.diff(stimChunks,axis=1)
-    # pad = stimChunks[:,0]
-    # stimChunks = np.hstack((pad[:,None],stimChunks))
     fidelity = [pearsonr(-s,x)[0] for (s,x) in zip(stimChunks,speedChunks)]
-    # import pdb; pdb.set_trace()
     return fidelity
 
 # Root directory
@@ -146,12 +142,6 @@ for subDir in tqdm(subDirs):
     isBacknforth = True
     noStim = False
 
-    # # Check stimulus type
-    # if 'backnforth' in subDir:
-    #     isBacknforth = True
-    # if 'nostim' in subDir:
-    #     noStim = True
-
     # Read data
     fictracPath = glob.glob(f'{subDir}/*[!video_server,!daq].h5')[0]
     vidServerPath = glob.glob(f'{subDir}/*video_server.h5')[0]
@@ -164,10 +154,8 @@ for subDir in tqdm(subDirs):
     rs = dset['fictrac']['output'][:,2]
 
     # Get stimulus direction direction
-    if isBacknforth and not noStim:
-        stimDirection = vid['video']['stimulus']['backnforth'][:,3]
-    else:
-        stimDirection'video']['stimulus']['grating'][:,-2]
+    # stimDirection = vid['video']['stimulus']['backnforth'][:,3]
+    stimDirection = -vid['video']['stimulus']['actuator'][:,4] # neg. because right translates to left for male 
 
     # Delta timestamps for fictrac
     deltaTimestamps = dset['fictrac']['output'][:,21]
@@ -177,20 +165,10 @@ for subDir in tqdm(subDirs):
     # Index is vid number, element is fictrac frame
     vidSync = vid['video']['synchronization_info']
 
-    # If stimulus is "NoStim", position is all zeros
-    if noStim:
-        stimDirection = np.zeros(len(vidSync[:,0]))
-
-    # If there was a stim delay, prepend to stimDirection
-    if 'delay' in subDir:
-        padLen = len(vid['video']['stimulus']['none'])
-        padVal = stimDirection[0]
-        stimDirection = np.insert(stimDirection,0,np.zeros(padLen)+padVal)
 
     # Resample stimulus position to match fictrac
     originalTime = vidSync[:,0] # fictrac frame for each video frame
     desiredTime = np.arange(len(rs)) # want one vid frame for each fictrac frame
-    import pdb; pdb.set_trace()
     stimDirection = np.interp(desiredTime,originalTime,stimDirection)
 
     nCycles = args.nCycles
@@ -198,28 +176,19 @@ for subDir in tqdm(subDirs):
 
     # Chunk rotational speed
     speedChunks,_,_ = chunkData(rs,nCycles=nCycles,peaks=peaks,dt=avgDT,nSamples=args.nSamples,isSpeed=True,isBacknforth=isBacknforth)
-    # import pdb; pdb.set_trace()
-    # Compute tracking vigor
-    if not noStim:
-        vigor = getTurningVigor(stimChunks,speedChunks)
-    else:
-        vigor = np.zeros(len(speedChunks))
 
+    # Compute tracking vigor
+    vigor = getTurningVigor(stimChunks,speedChunks)
 
     # Compute tracking fidelity of tracking experiment
-    if isBacknforth and not noStim:
-        fidelity = getFidelity(stimChunks,speedChunks)
-        TI = vigor*fidelity
-        # TI[TI<0]=0
+    fidelity = getFidelity(stimChunks,speedChunks)
+    TI = vigor*fidelity
 
-        # Save tracking index, vigor, and rotational speed
-        np.save(os.path.join(subDir,'tracking_index.npy'),TI)
-        np.save(os.path.join(subDir,'tracking_vigor.npy'),vigor)
-        np.save(os.path.join(subDir,'rotational_speed.npy'),rs)
+    # Save tracking index, vigor, and rotational speed
+    np.save(os.path.join(subDir,'tracking_index.npy'),TI)
+    np.save(os.path.join(subDir,'tracking_vigor.npy'),vigor)
+    np.save(os.path.join(subDir,'rotational_speed.npy'),rs)
 
-    else:
-        TI = vigor
-    # TI = vigor
     trialIDs = np.arange(len(vigor))
     trialTimestamps = (trialTime*trialIDs/60).astype(int)
     uniqueTimestamps = [np.ravel(np.argwhere(trialTimestamps==t)[0]) \
@@ -227,58 +196,8 @@ for subDir in tqdm(subDirs):
     uniqueTimestamps = np.ravel(uniqueTimestamps)
 
     # Convert rad/frame to rad/s.
-    # speedConversion = -1/avgDT * (2*np.pi*4.5)/(2*np.pi) # will be rad/frame * frame/s * mm/rad -> mm/s
     speedConversion = -1/avgDT # will be rad/frame * frame/s -> rad/s
     speedChunks*=speedConversion
-
-    # Chunk into ten sections
-    nChunks = args.nChunks
-    trialsPerChunk = len(speedChunks)//nChunks
-
-    fig,ax = plt.subplots(5,max(1,nChunks//5))
-    ax = np.ravel(ax)
-
-    for ii in range(nChunks):
-        start = ii*nChunks
-        stop = (ii+1)*nChunks
-        if ii==nChunks-1:
-            stop = len(speedChunks)
-
-        muSpeed = np.mean(speedChunks[start:stop],axis=0)
-        semSpeed = np.std(speedChunks[start:stop],axis=0)/np.sqrt(stop-start)
-        ax[ii].plot(muSpeed,color='k')
-        ax[ii].fill_between(np.arange(len(muSpeed)),muSpeed-semSpeed,muSpeed+semSpeed,color='k',alpha=0.5)
-        if ii==0:
-            ax[ii].set_xlabel('time (s)',fontsize=6)
-            ax[ii].set_ylabel('rotational speed \n (rad/s)',fontsize=6)
-
-        ax[ii].set_xticks([0,args.nSamples])
-        ax[ii].set_xticklabels([0,f'{trialTime:.0f}'])
-        sns.despine(ax=ax[ii])
-        ax[ii].set_title(f'chunk {ii+1}',fontsize=7)
-        ax[ii].tick_params(axis='both', labelsize=5)
-
-    ax = np.reshape(ax,(5,max(1,nChunks//5)))
-    plt.tight_layout()
-    plt.savefig(os.path.join(subDir,'average_speed.png'),dpi=300)
-    plt.close()
-
-    # If no stim, just plot speed over time
-    if noStim:
-        fig,ax1 = plt.subplots()
-        im = ax1.imshow(speedChunks,aspect='auto',cmap='bwr',norm=colors.CenteredNorm())
-        ax1.set_xticks([0,args.nSamples])
-        ax1.set_xticklabels([0,f'{trialTime:.0f}'])
-        ax1.set_yticks(trialIDs[uniqueTimestamps])
-        ax1.set_yticklabels(trialTimestamps[uniqueTimestamps].astype(int))
-        ax1.set_xlabel('time (s)')
-        ax1.set_ylabel('time (min)')
-        divider = make_axes_locatable(ax1)
-        cax = divider.append_axes('right', size='5%', pad=0.05)
-        fig.colorbar(im, cax=cax, orientation='vertical',label='rotational speed (rad/s)')
-        plt.savefig(os.path.join(subDir,'rotational_speed.png'),dpi=300)
-        plt.close()
-        continue
 
     # Overlay rotational speed and grating direction
     fig = plt.figure(constrained_layout=True)

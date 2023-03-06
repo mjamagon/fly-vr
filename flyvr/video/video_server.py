@@ -333,10 +333,12 @@ class ActuatorStim(VideoStim):
         mfDist = dset['features']['mfDist'][0][0]
         self.mfDist = self.convert_px_mm(mfDist)
         self.fFV = abs(self.convert_px_f_2_px_s(fFV)) # positive velocity -> move away
+        self.fFV = resample(self.fFV,int(len(self.fFV)/0.33))
         
         # load backnforth component
         f = loadmat(package_data_filename(filePath))
         self.femaleAngle = f['x'].flatten()/angleScaling
+        self.femaleAngle = resample(self.femaleAngle,int(len(self.femaleAngle)/1))
         
         # set the device max speed
         DeviceDefinition.max_speed = Measurement(value=np.max(self.fFV),unit=Units.LENGTH_MILLIMETRES)
@@ -390,22 +392,16 @@ class ActuatorStim(VideoStim):
     def initialize(self, win, fps, flyvr_shared_state):
         super().initialize(win, fps, flyvr_shared_state)
         self.sharedState = flyvr_shared_state
-        
-        # device list 
-        # connection = self.connection
-        # device_list = connection.detect_devices()
-        # self.axisX = device_list[0]
-        # self.axisY = device_list[1]
-            
-        # move x axis to closest position and y axis to middle 
-        self.axisX.move_absolute(12.5,Units.LENGTH_MILLIMETRES)
-        self.axisY.move_absolute(25,Units.LENGTH_MILLIMETRES)
+           
+        # # move x axis to closest position and y axis to middle 
+        # self.axisX.move_absolute(12.5,Units.LENGTH_MILLIMETRES)
+        # self.axisY.move_absolute(25,Units.LENGTH_MILLIMETRES)
 
 
     def update(self, win, logger, frame_num):
 
         # get forward and lateral male-female distance
-        distance = self.map_distance(self.clip_range(self.mfDist[frame_num])) # forward distance
+        distance = self.map_lateral(self.map_distance(self.clip_range(self.mfDist[frame_num])),originalRange=(0,25),newRange=(15,25)) # forward distance
         lateral = self.map_lateral(self.femaleAngle[frame_num]) # lateral distance 
 
         # move actuators 
@@ -419,6 +415,11 @@ class ActuatorStim(VideoStim):
                             distance,
                             lateral,
                             0,0)
+                            
+        # if self.shared_state.is_stopped(): # time to set the actuators to resting position and close port. TEST 
+        #     self.axisX.move_absolute(12.5,Units.LENGTH_MILLIMETRES)
+        #     self.axisY.move_absolute(25,Units.LENGTH_MILLIMETRES)
+        #     self.connection.close()
 
     def draw(self):
         # self.screen.draw()
