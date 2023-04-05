@@ -107,10 +107,10 @@ def main_launcher():
         # Get primary camera 
         system = PySpin.System.GetInstance()
         cam_list = system.GetCameras()
-        # cam1 = cam_list.GetBySerial(options.snPrimary)
-        # cam1.Init()
-        # nodemap1 = cam1.GetNodeMap()
-        # primaryCam = Camera(cam1,nodemap1) 
+        cam1 = cam_list.GetBySerial(options.snPrimary)
+        cam1.Init()
+        nodemap1 = cam1.GetNodeMap()
+        primaryCam = Camera(cam1,nodemap1) 
         # primaryCam.configure_trigger()
         # primaryCam.execute_trigger()
 
@@ -192,9 +192,6 @@ def main_launcher():
                 inputimeout('\n---------------\nPress any key to finish\n---------------\n\n' if i == 0 else '', 1)
                 flyvr_shared_state.signal_stop().join(timeout=5)
                 
-                ''' If there's a second camera, stop recording'''
-                if options.second_camera:
-                    secondaryCam.recorder._close_recorder()
                 break
             except TimeoutOccurred:
                 if flyvr_shared_state.is_stopped():
@@ -208,6 +205,10 @@ def main_launcher():
 
 
     log.info('stopped')
+
+    ''' If there's a second camera, stop recording'''
+    if options.second_camera:
+        secondaryCam.recorder._close_recorder()
 
     for task in (ipc_bus, gui, hwio, daq, video, audio):
         if task is not None:

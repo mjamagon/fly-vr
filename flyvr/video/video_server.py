@@ -352,6 +352,8 @@ class ActuatorStim(VideoStim):
             self.axisY = device.get_axis(2)
         except:
             raise AttributeError('no connection')
+        
+        self.adjust = 0 # protects against index out of bound error 
             
 
     def convert_px_f_2_px_s(self,x):
@@ -401,7 +403,11 @@ class ActuatorStim(VideoStim):
     def update(self, win, logger, frame_num):
 
         # get forward and lateral male-female distance
-        distance = self.map_lateral(self.map_distance(self.clip_range(self.mfDist[frame_num])),originalRange=(0,25),newRange=(15,25)) # forward distance
+        if frame_num - self.adjust >= len(self.mfDist):
+            self.adjust += len(self.mfDist)
+        
+        frame_num -= self.adjust # adjust the frame number to prevent overflow 
+        distance = self.map_lateral(self.map_distance(self.clip_range(self.mfDist[frame_num])),originalRange=(0,25),newRange=(20.5,23.5)) # forward distance
         lateral = self.map_lateral(self.femaleAngle[frame_num]) # lateral distance 
 
         # move actuators 

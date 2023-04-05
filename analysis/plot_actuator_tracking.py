@@ -114,6 +114,7 @@ def getTurningVigor(stimChunks,speedChunks):
     vigor = [sum(abs(speedRow)[maskRow]) for speedRow,maskRow in zip(speedChunks.copy(),vigorMask)] # speed ipsilateral to grating rotation
     vigor/=max(vigor)
     vigor=np.array(vigor)
+    # import pdb; pdb.set_trace()
 
     return vigor
 
