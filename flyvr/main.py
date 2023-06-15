@@ -91,7 +91,6 @@ def main_launcher():
 
     flyvr_shared_state = SharedState(options=options, logger=None, where='main')
 
-
     # start the IPC bus first as it is needed by many subsystems
     ipc_bus = ConcurrentTask(task=run_main_relay, comms=None, taskinitargs=[])
     ipc_bus.start()
@@ -102,23 +101,24 @@ def main_launcher():
 
     backend_wait = [BACKEND_FICTRAC]
 
+    # get camera information
+    system = PySpin.System.GetInstance()
+    cam_list = system.GetCameras()
+
     ''' %%% second camera setup %%%'''
     if options.second_camera:
-        # Get primary camera 
-        system = PySpin.System.GetInstance()
-        cam_list = system.GetCameras()
-        cam1 = cam_list.GetBySerial(options.snPrimary)
-        cam1.Init()
-        nodemap1 = cam1.GetNodeMap()
-        primaryCam = Camera(cam1,nodemap1) 
-        # primaryCam.configure_trigger()
-        # primaryCam.execute_trigger()
-
         # Get secondary camera
         cam2 = cam_list.GetBySerial(options.snSecondary)
         cam2.Init() 
         nodemap2 = cam2.GetNodeMap()
-        secondaryCam = Camera(cam2,nodemap2) 
+        secondaryCam = Camera(cam2,nodemap2,camName='secondary') 
+    
+    if options.third_camera:
+        # Get third camera
+        cam3 = cam_list.GetBySerial(options.snsTertiary)
+        cam3.Init() 
+        nodemap3 = cam3.GetNodeMap()
+        tertiaryCam = Camera(cam3,nodemap3,camName='tertiary') 
 
     trac_drv = _get_fictrac_driver(options, log)
     if trac_drv is not None:
@@ -128,6 +128,10 @@ def main_launcher():
         ## try starting secondary camera acquisition ## 
         if options.second_camera:
             secondaryCam.start_recording(fileName=os.path.dirname(options._config_file_path))        
+
+        ## try starting tertiary camera acquisition ## 
+        if options.third_camera:
+            tertiaryCam.start_recording(fileName=os.path.dirname(options._config_file_path))        
 
         # wait till fictrac is processing frames
         flyvr_shared_state.wait_for_backends(BACKEND_FICTRAC)
@@ -148,7 +152,6 @@ def main_launcher():
     if options.keepalive_video or options.playlist.get('video'):
         try: 
             com = options.actuatorCom
-            # with Connection.open_serial_port(com) as connection:
             task = lambda x: run_video_server(x,connection=com)
             video = ConcurrentTask(task=task, comms=None, taskinitargs=[options])
         except:
@@ -169,10 +172,6 @@ def main_launcher():
     else:
         audio = None
         log.info('not starting video backend (playlist empty or keepalive_video not specified)')
-
-        # camera = ConcurrentTask(task=run_camera_server, comms=None, taskinitargs=[options])
-        # backend_wait.append(BACKEND_CAMERA)
-        # camera.start()
 
     log.info('waiting %ss for %r to be ready' % (60, backend_wait))
     if flyvr_shared_state.wait_for_backends(*backend_wait, timeout=60):
@@ -206,9 +205,11 @@ def main_launcher():
 
     log.info('stopped')
 
-    ''' If there's a second camera, stop recording'''
+    ''' If there's a second or third camera, stop recording'''
     if options.second_camera:
         secondaryCam.recorder._close_recorder()
+    if options.third_camera:
+        tertiaryCam.recorder._close_recorder()
 
     for task in (ipc_bus, gui, hwio, daq, video, audio):
         if task is not None:

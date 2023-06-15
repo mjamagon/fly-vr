@@ -12,10 +12,11 @@ import threading
 from threading import Thread
 
 class Recorder(threading.Thread):
-    def __init__(self,camera,fileName:str):
+    def __init__(self,camera,fileName:str,camName:str):
         Thread.__init__(self)
         self.daemon = True
         self.fileName = fileName
+        self.camName = camName # name of camera
         self.camera = camera 
         self.isAlive = True
         self._lock = threading.Lock()
@@ -26,13 +27,19 @@ class Recorder(threading.Thread):
     def _open_recorder(self):
         # self.recorder.Open(self.fileName,self.option) 
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        savePath = os.path.join(self.fileName,'secondary.mp4')
+        savePath = os.path.join(self.fileName,f'{self.camName}.mp4')
         self.vidWrite = cv2.VideoWriter(savePath,fourcc,isColor=False,frameSize=(560,560),fps=75)
 
     def _close_recorder(self):
-        print('shutting down camera recording...')
-        self.vidWrite.release()
         self.isAlive = False
+        print('shutting down camera recording...')
+        shutdownSuccess = False 
+        while not shutdownSuccess:
+            try:
+                self.vidWrite.release()
+                shutdownSuccess = True
+            except: 
+                pass
 
     def run(self):
         while self.isAlive: 
@@ -46,50 +53,19 @@ class Recorder(threading.Thread):
             except Exception as e:
                 print(e,flush=True)
 
-# class Recorder():
-#     def __init__(self,camera,fileName:str):
-#         self.fileName = fileName
-#         self.camera = camera 
-#         self.isAlive = True
-        
-#        # Initialize recorder 
-#         self._open_recorder()
-
-#     def _open_recorder(self):
-#         # self.recorder.Open(self.fileName,self.option) 
-#         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-#         savePath = os.path.join(self.fileName,'secondary.mp4')
-#         self.vidWrite = cv2.VideoWriter(savePath,fourcc,isColor=0,frameSize=(560,560),fps=75)
-
-#     def _close_recorder(self):
-#         # self.recorder.Close()
-#         self.vidWrite.release()
-
-#     def run(self):
-#         for _ in range(50):
-#             print('doing',flush=True)
-#             try:
-#                 image = self.camera.GetNextImage()
-#                 image = image.Convert(PySpin.PixelFormat_Mono8,PySpin.HQ_LINEAR)
-#                 imageArray = image.GetNDArray().astype(np.uint8) # get data from pointer as numpy array
-#                 self.vidWrite.write(imageArray)
-#                 # import pdb; pdb.set_trace()
-#             except Exception as e:
-#                 print(e,flush=True)
-#         self._close_recorder()
-
 class Camera:
-    def __init__(self,camera,nodemap):
-        self.camera = camera
+    def __init__(self,camera,nodemap,camName:str):
+        self.camera = camera # pyspin camera object 
         self.nodemap = nodemap
         self.recorder = None
+        self.camName = camName # name of camera 
 
     def start_recording(self,fileName):
         print('starting camera recording...',flush=True)
 
         # Acquire and save images 
         self.camera.BeginAcquisition()
-        recorder = Recorder(camera=self.camera,fileName=fileName)
+        recorder = Recorder(camera=self.camera,fileName=fileName,camName=self.camName)
         recorder.start()
         self.recorder = recorder
 

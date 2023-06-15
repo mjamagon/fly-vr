@@ -72,25 +72,9 @@ def chunkData(x,nCycles,dt,peaks=None,nSamples=1000,isSpeed=False,isBacknforth=F
 
     # Identify peaks in data - peaks in second derivative (discontinuities)
     if peaks is None:
-        if not isBacknforth:
-            d2x = abs(np.diff(np.diff(x)))
-            d2x[d2x>0.2] = 1
-            peaks = find_peaks(d2x,distance=100)[0][2:]
-        # Anything else
-        else:
-            # Stationary stimulus control: we'll pretend there are 7 peaks every 10 seconds
-            if np.isnan(x).all():
-                peaks = []
-                ii = 1
-                shamTime = 0
-                while shamTime < len(x):
-                    shamTime = int(ii*(1/(0.7*dt)))
-                    peaks.append(shamTime)
-                    ii+=1
-
-            # If moving stimulus, find the peaks
-            else:
-                peaks = find_peaks(abs(x),distance=100)[0]
+        peaks = find_peaks(abs(x),distance=100,height=0.1)[0]
+    # plt.plot(x);plt.scatter(peaks,x[peaks],c='r');plt.show()
+    # import pdb; pdb.set_trace()
 
     # Chunk data by peaks
     # xChunked = [x[np.arange(peaks[ii*(nPeaks-1)],peaks[ii*(nPeaks-1)+nPeaks])] for ii,_ in enumerate(peaks) if ii*(nPeaks-1)+nPeaks<len(peaks)]
@@ -108,8 +92,13 @@ def getTurningVigor(stimChunks,speedChunks):
     %% Inputs %%
     - stimChunks (array): each row is a stimulus cycle or integer multiple of cycles. zero-centered
     - speedChunks (array): stimulus-aligned speed data (each row is one stimulus period)'''
+    stimChunks = -np.diff(stimChunks,axis=1,prepend=stimChunks[0,0]) # try derivative?
+    deriv = scale(np.mean(stimChunks[:10],axis=0),-1,1)
+    rsMean  = scale(np.mean(speedChunks[:10],axis=0),-1,1)
+    # plt.imshow(stimChunks);plt.show()
+    # import pdb; pdb.set_trace()
     stimSign = np.ones(np.shape(stimChunks))
-    speedSign = -np.where(speedChunks>0,1,-1) # negative because clockwise rotation = left turn
+    speedSign = np.where(speedChunks>0,1,-1) # negative because clockwise rotation = left turn
     vigorMask = stimSign==speedSign # check sign consistency
     vigor = [sum(abs(speedRow)[maskRow]) for speedRow,maskRow in zip(speedChunks.copy(),vigorMask)] # speed ipsilateral to grating rotation
     vigor/=max(vigor)
@@ -126,7 +115,8 @@ def getFidelity(stimChunks,speedChunks):
     %% Outputs %%
     - fidelity (array): pearson correlation between stimulus position and turning speed
     '''
-    fidelity = [pearsonr(-s,x)[0] for (s,x) in zip(stimChunks,speedChunks)]
+    stimChunks = -np.diff(stimChunks,axis=1,prepend=stimChunks[0,0]) # try derivative?
+    fidelity = [pearsonr(s,x)[0] for (s,x) in zip(stimChunks,speedChunks)]
     return fidelity
 
 # Root directory
@@ -152,11 +142,11 @@ for subDir in tqdm(subDirs):
     daq = h5py.File(daqPath,'r') # daq data
 
     # Get rotational speed
-    rs = dset['fictrac']['output'][:,2]
+    rs = -dset['fictrac']['output'][:,2]
 
     # Get stimulus direction direction
     # stimDirection = vid['video']['stimulus']['backnforth'][:,3]
-    stimDirection = -vid['video']['stimulus']['actuator'][:,4] # neg. because right translates to left for male 
+    stimDirection = vid['video']['stimulus']['actuator'][:,4] # neg. because right translates to left for male 
 
     # Delta timestamps for fictrac
     deltaTimestamps = dset['fictrac']['output'][:,21]
@@ -183,7 +173,9 @@ for subDir in tqdm(subDirs):
 
     # Compute tracking fidelity of tracking experiment
     fidelity = getFidelity(stimChunks,speedChunks)
-    TI = vigor*fidelity
+    # TI = vigor*fidelity
+    # TI = vigor
+    TI = fidelity
 
     # Save tracking index, vigor, and rotational speed
     np.save(os.path.join(subDir,'tracking_index.npy'),TI)

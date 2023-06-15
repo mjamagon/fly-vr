@@ -138,9 +138,11 @@ def build_argparser(savefilename=None):
     parser.add_argument('--samplerate_daq', default=10000, type=int,
                         help='DAQ sample rate (advanced option, do not change)')
     parser.add_argument('--print-defaults', help='Print default config values', action='store_true')
-    parser.add_argument('--second_camera',type=bool,default=False,help='flag to indicate if a second camera is present')
+    parser.add_argument('--second_camera',action='store_true',default=False,help='flag to indicate if a second camera is present')
+    parser.add_argument('--third_camera',default=False,action='store_true',help='flag to indicate if a third camera is present')
     parser.add_argument('--snPrimary',type=str,help='primary camera serial number')
     parser.add_argument('--snSecondary',type=str,help='secondary camera serial number')
+    parser.add_argument('--snsTertiary',type=str,help='tertiary camera serial number')
     parser.add_argument('--actuatorCom',type=str,help='actuator COM port')
 
     return parser

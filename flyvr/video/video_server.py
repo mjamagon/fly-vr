@@ -326,6 +326,13 @@ class ActuatorStim(VideoStim):
        ''' 
         super().__init__(**kwargs)
 
+        # initialize timer 
+        self.timer = 0 # time relative to start time 
+        self.t0 = time.time() # start time 
+        self.pauseDur = 10 # second pause duration to allow fly to tap 
+        self.trialDur = 300000 # second period where the female fly moves around
+        self.isPaused = False # flag for whether or not pause period is on 
+
         # mfDist data
         dataPath = package_data_filename('tracking.mat')
         dset = loadmat(dataPath)
@@ -338,7 +345,8 @@ class ActuatorStim(VideoStim):
         # load backnforth component
         f = loadmat(package_data_filename(filePath))
         self.femaleAngle = f['x'].flatten()/angleScaling
-        self.femaleAngle = resample(self.femaleAngle,int(len(self.femaleAngle)/1))
+        self.femaleAngle = resample(self.femaleAngle,int(len(self.femaleAngle)/0.5)) 
+
         
         # set the device max speed
         DeviceDefinition.max_speed = Measurement(value=np.max(self.fFV),unit=Units.LENGTH_MILLIMETRES)
@@ -394,6 +402,7 @@ class ActuatorStim(VideoStim):
     def initialize(self, win, fps, flyvr_shared_state):
         super().initialize(win, fps, flyvr_shared_state)
         self.sharedState = flyvr_shared_state
+        win.winHandle.minimize() # minimise the PsychoPy window for this experiment: we don't need a visual stimulus
            
         # # move x axis to closest position and y axis to middle 
         # self.axisX.move_absolute(12.5,Units.LENGTH_MILLIMETRES)
@@ -402,17 +411,42 @@ class ActuatorStim(VideoStim):
 
     def update(self, win, logger, frame_num):
 
-        # get forward and lateral male-female distance
+        # adjust frame number if overflow
         if frame_num - self.adjust >= len(self.mfDist):
             self.adjust += len(self.mfDist)
         
         frame_num -= self.adjust # adjust the frame number to prevent overflow 
-        distance = self.map_lateral(self.map_distance(self.clip_range(self.mfDist[frame_num])),originalRange=(0,25),newRange=(20.5,23.5)) # forward distance
-        lateral = self.map_lateral(self.femaleAngle[frame_num]) # lateral distance 
+
+        # update timer 
+        self.timer = time.time() - self.t0
+
+        # trigger the pause durtion so male can tap female
+        if self.timer >= self.trialDur and not self.isPaused: 
+            self.isPaused = True 
+            self.t0 = time.time() # reset reference time 
+            self.timer = 0
+
+        # female fly is positioned in front of male to allow tapping 
+        if self.isPaused and self.timer < self.pauseDur:
+            distance = 23.5
+            lateral = 12.5 
+        
+        # otherwise move the female 
+        else:
+            distance = self.map_lateral(self.map_distance(self.clip_range(self.mfDist[frame_num])),originalRange=(0,25),newRange=(24,25)) # forward distance
+            lateral = self.map_lateral(self.femaleAngle[frame_num]) # lateral distance 
+
+        # re-enter the movement phase if pause duration is exceeded
+        if self.isPaused and self.timer >= self.pauseDur:
+            self.isPaused = False 
+            self.t0 = time.time()
+            self.timer = 0
 
         # move actuators 
         self.axisX.move_absolute(lateral,Units.LENGTH_MILLIMETRES,wait_until_idle = False)
         self.axisY.move_absolute(distance,Units.LENGTH_MILLIMETRES,wait_until_idle = False)
+
+        print((self.isPaused,self.timer),flush=True)
 
         # Log data
         self.h5_log(logger, frame_num,
