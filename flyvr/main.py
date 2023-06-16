@@ -111,14 +111,14 @@ def main_launcher():
         cam2 = cam_list.GetBySerial(options.snSecondary)
         cam2.Init() 
         nodemap2 = cam2.GetNodeMap()
-        secondaryCam = Camera(cam2,nodemap2,camName='secondary') 
+        secondaryCam = Camera(cam2,nodemap2,camName='secondary',sharedState=flyvr_shared_state) 
     
     if options.third_camera:
         # Get third camera
         cam3 = cam_list.GetBySerial(options.snsTertiary)
         cam3.Init() 
         nodemap3 = cam3.GetNodeMap()
-        tertiaryCam = Camera(cam3,nodemap3,camName='tertiary') 
+        tertiaryCam = Camera(cam3,nodemap3,camName='tertiary',sharedState=flyvr_shared_state) 
 
     trac_drv = _get_fictrac_driver(options, log)
     if trac_drv is not None:

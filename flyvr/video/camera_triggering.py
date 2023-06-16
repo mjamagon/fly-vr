@@ -10,9 +10,10 @@ import cv2
 import os
 import threading
 from threading import Thread
+import h5py
 
 class Recorder(threading.Thread):
-    def __init__(self,camera,fileName:str,camName:str):
+    def __init__(self,camera,fileName:str,camName:str,sharedState):
         Thread.__init__(self)
         self.daemon = True
         self.fileName = fileName
@@ -20,9 +21,23 @@ class Recorder(threading.Thread):
         self.camera = camera 
         self.isAlive = True
         self._lock = threading.Lock()
+        self.flyvr_shared_state = sharedState # flyvr shared state
+        self.savedFrames = 0 # number of saved camera frames so far 
+        self.camH5 = None # camera h5 file 
 
+        # Dataset names for h5 file 
+        self.datasetNames = ['saved_cam_frames',
+                             'fictrac_frame_num',
+                             'daq_output_num_samples_written',
+                             'daq_input_num_samples_written',
+                             'sound_output_num_samples_written',
+                             'video_output_num_frames',
+                             'time_ns']
        # Initialize recorder 
         self._open_recorder()
+
+        # Initialize the synchronization datset 
+        self._init_h5()
 
     def _open_recorder(self):
         # self.recorder.Open(self.fileName,self.option) 
@@ -34,12 +49,42 @@ class Recorder(threading.Thread):
         self.isAlive = False
         print('shutting down camera recording...')
         shutdownSuccess = False 
+
         while not shutdownSuccess:
             try:
                 self.vidWrite.release()
                 shutdownSuccess = True
             except: 
                 pass
+
+    def _init_h5(self):
+        '''initialize h5 file'''
+        self.camH5 = h5py.File(os.path.join(self.fileName,f'{self.camName}.h5'),'w')
+        self.camH5.create_group('synchronization_info')
+
+        for name in self.datasetNames:
+            self.camH5['synchronization_info'].create_dataset(f'{name}',(1,1),maxshape=(None,1),dtype=np.int64)
+
+    def _update_h5(self):
+        '''update the h5 file'''
+
+        # get the current fictrac frame from the flyvr shared state 
+        stateInformation = np.array([self.savedFrames,
+                    self.flyvr_shared_state.FICTRAC_FRAME_NUM,
+                    self.flyvr_shared_state.DAQ_OUTPUT_NUM_SAMPLES_WRITTEN,
+                    self.flyvr_shared_state.DAQ_INPUT_NUM_SAMPLES_READ,
+                    self.flyvr_shared_state.SOUND_OUTPUT_NUM_SAMPLES_WRITTEN,
+                    self.flyvr_shared_state.VIDEO_OUTPUT_NUM_FRAMES,
+                    self.flyvr_shared_state.TIME_NS], dtype=np.int64)
+
+
+        # update the h5 datasets  
+        for name,info in zip(self.datasetNames,stateInformation):
+            idx,_ = self.camH5['synchronization_info'][name].shape
+            self.camH5['synchronization_info'][name][idx-1] = info
+            
+            # resize the dataset 
+            self.camH5['synchronization_info'][name].resize(idx+1,axis=0)
 
     def run(self):
         while self.isAlive: 
@@ -50,22 +95,35 @@ class Recorder(threading.Thread):
                     image = image.Convert(PySpin.PixelFormat_Mono8,PySpin.HQ_LINEAR)
                     imageArray = image.GetNDArray() # get data from pointer as numpy array
                     self.vidWrite.write(imageArray)
+                    self.savedFrames += 1 # update the saved frames counter 
+                    self._update_h5()
+
             except Exception as e:
                 print(e,flush=True)
 
+        if not self.isAlive:
+            self.camH5.close()
+
 class Camera:
-    def __init__(self,camera,nodemap,camName:str):
+    def __init__(self,camera,nodemap,sharedState,camName:str):
+        '''wrapper around pyspin camera
+        % Inputs 
+        camera: pyspin camera 
+        nodemap: pyspin nodemap
+        sharedState: flyvr shared state
+        '''
         self.camera = camera # pyspin camera object 
         self.nodemap = nodemap
         self.recorder = None
         self.camName = camName # name of camera 
+        self.sharedState = sharedState
 
     def start_recording(self,fileName):
         print('starting camera recording...',flush=True)
 
         # Acquire and save images 
         self.camera.BeginAcquisition()
-        recorder = Recorder(camera=self.camera,fileName=fileName,camName=self.camName)
+        recorder = Recorder(camera=self.camera,fileName=fileName,camName=self.camName,sharedState=self.sharedState)
         recorder.start()
         self.recorder = recorder
 
