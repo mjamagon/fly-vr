@@ -72,7 +72,11 @@ def chunkData(x,nCycles,dt,peaks=None,nSamples=1000,isSpeed=False,isBacknforth=F
 
     # Identify peaks in data - peaks in second derivative (discontinuities)
     if peaks is None:
-        peaks = find_peaks(abs(x),distance=100,height=0.1)[0]
+        posSignal = np.where(x>0,1,0)
+        negSignal = np.where(x<0,1,0)
+        peaksPos = find_peaks(posSignal,distance=100,height=0.1)[0]
+        peaksNeg = find_peaks(negSignal,distance=100,height=0.1)[0]
+        peaks = np.sort(list(peaksPos) + list(peaksNeg))
     # plt.plot(x);plt.scatter(peaks,x[peaks],c='r');plt.show()
     # import pdb; pdb.set_trace()
 
@@ -173,14 +177,22 @@ for subDir in tqdm(subDirs):
 
     # Compute tracking fidelity of tracking experiment
     fidelity = getFidelity(stimChunks,speedChunks)
-    # TI = vigor*fidelity
+    TI = vigor*fidelity
     # TI = vigor
-    TI = fidelity
-
+    # TI = fidelity
+    # import pdb; pdb.set_trace()
     # Save tracking index, vigor, and rotational speed
     np.save(os.path.join(subDir,'tracking_index.npy'),TI)
     np.save(os.path.join(subDir,'tracking_vigor.npy'),vigor)
     np.save(os.path.join(subDir,'rotational_speed.npy'),rs)
+
+    # template correlation
+    mu = np.mean(speedChunks,axis=0)
+    corr = np.array([pearsonr(x,mu)[0] for x in speedChunks])
+    trialSpeed = abs(np.mean(speedChunks,axis=-1))
+    trialSpeed/=max(trialSpeed)
+    ti = corr*trialSpeed
+    import pdb; pdb.set_trace()
 
     trialIDs = np.arange(len(vigor))
     trialTimestamps = (trialTime*trialIDs/60).astype(int)
